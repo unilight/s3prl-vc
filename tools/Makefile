@@ -1,4 +1,4 @@
-PYTHON:= python3.8
+PYTHON:= python
 CUDA_VERSION:= 11.2
 PYTORCH_VERSION:= 1.13
 DOT:= .

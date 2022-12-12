@@ -12,8 +12,8 @@ class Vocoder(object):
     def __init__(self, checkpoint, config, stats, trg_stats, device):
         self.device = device
         self.trg_stats = {
-            "mean": torch.tensor(trg_stats["mean"], dtype=torch.float).to(self.device),
-            "scale": torch.tensor(trg_stats["scale"], dtype=torch.float).to(self.device)
+            "mean": trg_stats["mean"].to(self.device),
+            "scale": trg_stats["scale"].to(self.device)
         }
 
         # load config
@@ -33,8 +33,6 @@ class Vocoder(object):
         }
 
     def decode(self, c):
-        # denormalize with target stats
-        c = c * self.trg_stats["scale"] + self.trg_stats["mean"]
         # normalize with vocoder stats
         c = (c - self.stats["mean"]) / self.stats["scale"]
 

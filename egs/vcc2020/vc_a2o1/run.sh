@@ -18,9 +18,7 @@ conf=conf/taco2_ar.yaml
 
 # dataset configuration
 db_root=downloads
-dumpdir=dump                # directory to dump full features
 trgspk=TEF1
-stats_ext=h5
 
 # pretrained model related
 pretrained_model=           # available pretrained models: m_ailabs.judy.vtn_tts_pt
@@ -104,16 +102,15 @@ if [ "${stage}" -le 3 ] && [ "${stop_stage}" -ge 3 ]; then
     # shellcheck disable=SC2012
     [ -z "${checkpoint}" ] && checkpoint="$(ls -dt "${expdir}"/*.pkl | head -1 || true)"
     outdir="${expdir}/results/$(basename "${checkpoint}" .pkl)"
-    pids=()
-    for name in "${srcspk}_dev" "${srcspk}_eval"; do
+    for name in "eval"; do
         [ ! -e "${outdir}/${name}" ] && mkdir -p "${outdir}/${name}"
         [ "${n_gpus}" -gt 1 ] && n_gpus=1
         echo "Decoding start. See the progress via ${outdir}/${name}/decode.log."
         ${cuda_cmd} --gpu "${n_gpus}" "${outdir}/${name}/decode.log" \
-            vc_decode.py \
-                --dumpdir "${dumpdir}/${name}/norm_${norm_name}" \
+            decode.py \
+                --scp "data/${name}/wav.scp" \
                 --checkpoint "${checkpoint}" \
-                --trg-stats "${expdir}/${trgspk}_stats.${stats_ext}" \
+                --trg-stats "${expdir}/stats.h5" \
                 --outdir "${outdir}/${name}" \
                 --verbose "${verbose}"
         echo "Successfully finished decoding of ${name} set."
@@ -126,14 +123,15 @@ if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ]; then
 
     [ -z "${checkpoint}" ] && checkpoint="$(ls -dt "${expdir}"/*.pkl | head -1 || true)"
     outdir="${expdir}/results/$(basename "${checkpoint}" .pkl)"
-    for name in "${srcspk}_dev" "${srcspk}_eval"; do
+    for name in "eval"; do
         wavdir="${outdir}/${name}/wav"
         echo "Evaluation start. See the progress via ${outdir}/${name}/evaluation.log."
         ${cuda_cmd} --gpu "${n_gpus}" "${outdir}/${name}/evaluation.log" \
             local/evaluate.py \
                 --wavdir ${wavdir} \
-                --data_root "${db_root}/cmu_us_${trgspk}_arctic" \
+                --data_root "${db_root}/vcc2020" \
                 --trgspk ${trgspk} \
                 --f0_path "conf/f0.yaml"
+        grep "Mean MCD" "${outdir}/${name}/evaluation.log"
     done
 fi

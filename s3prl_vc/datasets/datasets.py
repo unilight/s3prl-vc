@@ -10,6 +10,7 @@ import logging
 from multiprocessing import Manager
 
 import kaldiio
+import librosa
 import numpy as np
 
 from torch.utils.data import Dataset
@@ -108,6 +109,9 @@ class AudioSCPMelDataset(Dataset):
             # keep compatibility
             log_base=self.config.get("log_base", 10.0),
         )
+
+        # always resample to 16kHz
+        audio = librosa.resample(audio, orig_sr=fs, target_sr=16000)
 
         if self.return_sampling_rate:
             audio = (audio, fs)

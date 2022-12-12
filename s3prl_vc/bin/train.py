@@ -24,7 +24,7 @@ from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from s3prl.nn import S3PRLUpstream
+from s3prl.nn import S3PRLUpstream, Featurizer
 
 import s3prl_vc
 import s3prl_vc.models
@@ -32,6 +32,7 @@ import s3prl_vc.losses
 
 from s3prl_vc.datasets.datasets import AudioSCPMelDataset
 from s3prl_vc.utils import read_hdf5
+from s3prl_vc.utils.data import pad_list
 from s3prl_vc.vocoder import Vocoder
 # from s3prl_vc.utils.model_io import freeze_modules, filter_modules, get_partial_state_dict, transfer_verification, print_new_keys
 
@@ -55,6 +56,7 @@ class Trainer(object):
         data_loader,
         sampler,
         upstream_model,
+        upstream_featurizer,
         model,
         vocoder,
         criterion,
@@ -82,6 +84,7 @@ class Trainer(object):
         self.data_loader = data_loader
         self.sampler = sampler
         self.upstream_model = upstream_model
+        self.upstream_featurizer = upstream_featurizer
         self.model = model
         self.vocoder = vocoder
         self.criterion = criterion
@@ -194,18 +197,18 @@ class Trainer(object):
 
         # upstream forward
         with torch.no_grad():
-            hs, hlens = self.upstream_model(xs, ilens)
+            all_hs, all_hlens = self.upstream_model(xs, ilens)
+        hs, hlens = self.upstream_featurizer(all_hs, all_hlens)
 
         # model forward
-        outs, outs_lens = self.model(hs, hlens, ys, spembs)        
+        outs, outs_lens = self.model(hs, hlens, targets=ys, spk_embs=spembs)        
 
         # normalize output
         outs = (outs - self.config["trg_stats"]["mean"]) / self.config["trg_stats"]["scale"]
+        ys = (ys - self.config["trg_stats"]["mean"]) / self.config["trg_stats"]["scale"]
 
         # main loss
-        gen_loss = 0.0
-        main_loss = self.criterion["main"](outs, outs_lens, ys, olens)
-        gen_loss += main_loss
+        gen_loss = self.criterion["main"](outs, outs_lens, ys, olens, self.device)
         self.total_train_loss["train/main"] += gen_loss.item()
         
         self.total_train_loss["train/loss"] += gen_loss.item()
@@ -215,7 +218,7 @@ class Trainer(object):
         gen_loss.backward()
         if self.config["grad_norm"] > 0:
             torch.nn.utils.clip_grad_norm_(
-                self.model.parameters(),
+                list(self.model.parameters()) + list(self.upstream_featurizer.parameters()),
                 self.config["grad_norm"],
             )
         self.optimizer.step()
@@ -264,6 +267,7 @@ class Trainer(object):
         """Evaluate model one epoch."""
         logging.info(f"(Steps: {self.steps}) Start evaluation.")
         # change mode
+        self.upstream_featurizer.eval()
         self.model.eval()
 
         # save intermediate result
@@ -279,6 +283,7 @@ class Trainer(object):
         )
 
         # restore mode
+        self.upstream_featurizer.train()
         self.model.train()
 
     @torch.no_grad()
@@ -336,43 +341,37 @@ class Trainer(object):
         if not os.path.exists(dirname):
             os.makedirs(dirname)
 
-        # generate
-        xs, _, ys, _, olens, spembs = tuple([_.to(self.device) if _ is not None else _ for _ in batch])
+        # prepare input
+        xs, ilens, ys, olens, spembs = tuple([_.to(self.device) if _ is not None else _ for _ in batch])
         if spembs is None: spembs = [None] * len(xs)
-        for idx, (x, y, olen, spemb) in enumerate(zip(xs, ys, olens, spembs)):
-            start_time = time.time()
-            outs, probs, att_ws = self.model.inference(x, self.config["inference"], spemb=spemb)
-            logging.info(
-                "inference speed = %.1f frames / sec."
-                % (int(outs.size(0)) / (time.time() - start_time))
-            )
+        
+        # generate
+        with torch.no_grad():
+            all_hs, all_hlens = self.upstream_model(xs, ilens)
+            hs, hlens = self.upstream_featurizer(all_hs, all_hlens)
+            outs, _ = self.model(hs, hlens, spk_embs=spembs)
 
+        for idx, (out, olen, y) in enumerate(zip(outs, olens, ys)):
+            out = out[:olen]
+            y = y[:olen]
             _plot_and_save(
-                outs.cpu().numpy(),
+                out.cpu().numpy(),
                 dirname + f"/outs/{idx}_out.png",
-                ref=y[:olen].cpu().numpy(),
+                ref=y.cpu().numpy(),
                 origin="lower"
-            )
-            _plot_and_save(
-                probs.cpu().numpy(),
-                dirname + f"/probs/{idx}_prob.png",
-            )
-            _plot_and_save(
-                att_ws.cpu().numpy(),
-                dirname + f"/att_ws/{idx}_att_ws.png",
             )
 
             if self.vocoder is not None:
                 if not os.path.exists(os.path.join(dirname, "wav")):
                     os.makedirs(os.path.join(dirname, "wav"), exist_ok=True)
-                y, sr = self.vocoder.decode(outs)
+                y, sr = self.vocoder.decode(out)
                 sf.write(
                     os.path.join(dirname, "wav", f"{idx}_gen.wav"),
                     y.cpu().numpy(),
                     sr,
                     "PCM_16",
                 )
-
+            
             if idx >= self.config["num_save_intermediate_results"]:
                 break
 
@@ -418,34 +417,34 @@ class Collater(object):
     def __call__(self, batch):
         """Convert into batch tensors. """
 
-        def pad_list(xs, pad_value):
-            """Perform padding for the list of tensors.
+        # def pad_list(xs, pad_value):
+        #     """Perform padding for the list of tensors.
 
-            Args:
-                xs (List): List of Tensors [(T_1, `*`), (T_2, `*`), ..., (T_B, `*`)].
-                pad_value (float): Value for padding.
+        #     Args:
+        #         xs (List): List of Tensors [(T_1, `*`), (T_2, `*`), ..., (T_B, `*`)].
+        #         pad_value (float): Value for padding.
 
-            Returns:
-                Tensor: Padded tensor (B, Tmax, `*`).
+        #     Returns:
+        #         Tensor: Padded tensor (B, Tmax, `*`).
 
-            Examples:
-                >>> x = [torch.ones(4), torch.ones(2), torch.ones(1)]
-                >>> x
-                [tensor([1., 1., 1., 1.]), tensor([1., 1.]), tensor([1.])]
-                >>> pad_list(x, 0)
-                tensor([[1., 1., 1., 1.],
-                        [1., 1., 0., 0.],
-                        [1., 0., 0., 0.]])
+        #     Examples:
+        #         >>> x = [torch.ones(4), torch.ones(2), torch.ones(1)]
+        #         >>> x
+        #         [tensor([1., 1., 1., 1.]), tensor([1., 1.]), tensor([1.])]
+        #         >>> pad_list(x, 0)
+        #         tensor([[1., 1., 1., 1.],
+        #                 [1., 1., 0., 0.],
+        #                 [1., 0., 0., 0.]])
 
-            """
-            n_batch = len(xs)
-            max_len = max(x.size(0) for x in xs)
-            pad = xs[0].new(n_batch, max_len, *xs[0].size()[1:]).fill_(pad_value)
+        #     """
+        #     n_batch = len(xs)
+        #     max_len = max(x.size(0) for x in xs)
+        #     pad = xs[0].new(n_batch, max_len, *xs[0].size()[1:]).fill_(pad_value)
 
-            for i in range(n_batch):
-                pad[i, : xs[i].size(0)] = xs[i]
+        #     for i in range(n_batch):
+        #         pad[i, : xs[i].size(0)] = xs[i]
 
-            return pad
+        #     return pad
 
         xs, ys = [b[0] for b in batch], [b[1] for b in batch]
 
@@ -610,8 +609,8 @@ def main():
 
     # load target stats for denormalization
     config["trg_stats"] = {
-        "mean": read_hdf5(args.trg_stats, "mean"),
-        "scale": read_hdf5(args.trg_stats, "scale")
+        "mean": torch.from_numpy(read_hdf5(args.trg_stats, "mean")).float().to(device),
+        "scale": torch.from_numpy(read_hdf5(args.trg_stats, "scale")).float().to(device),
     }
 
     # get dataset
@@ -671,8 +670,9 @@ def main():
     }
 
     # define upstream model
-    upstream_model = S3PRLUpstream(args.upstream)
+    upstream_model = S3PRLUpstream(args.upstream).to(device)
     upstream_model.eval()
+    upstream_featurizer = Featurizer(upstream_model).to(device)
 
     # define models
     model_class = getattr(
@@ -680,6 +680,10 @@ def main():
         config.get("model_type", "Taco2_AR"),
     )
     model = model_class(
+        upstream_featurizer.output_size,
+        config["num_mels"],
+        config["sampling_rate"] / config["hop_size"] * upstream_featurizer.downsample_rate / 16000,
+        config["trg_stats"],
         **config["model_params"]
     ).to(device)
 
@@ -714,12 +718,13 @@ def main():
         config.get("optimizer_type", "Adam"),
     )
     optimizer = optimizer_class(
-        model.parameters(),
+        list(model.parameters()) + list(upstream_featurizer.parameters()),
         **config["optimizer_params"],
     )
     scheduler_class = scheduler_classes.get(config.get("scheduler_type", "linear_schedule_with_warmup"))
     scheduler = scheduler_class(
         optimizer=optimizer,
+        num_training_steps=config["train_max_steps"],
         **config["scheduler_params"],
     )
 
@@ -746,6 +751,7 @@ def main():
         data_loader=data_loader,
         sampler=sampler,
         upstream_model=upstream_model,
+        upstream_featurizer=upstream_featurizer,
         model=model,
         vocoder=vocoder,
         criterion=criterion,

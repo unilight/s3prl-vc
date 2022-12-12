@@ -121,7 +121,7 @@ class Taco2Encoder(torch.nn.Module):
             return xs.transpose(1, 2)
         if not isinstance(ilens, torch.Tensor):
             ilens = torch.tensor(ilens)
-        xs = pack_padded_sequence(xs.transpose(1, 2), ilens.cpu(), batch_first=True)
+        xs = pack_padded_sequence(xs.transpose(1, 2), ilens.cpu(), batch_first=True, enforce_sorted=False)
         self.blstm.flatten_parameters()
         xs, _ = self.blstm(xs)  # (B, Lmax, C)
         xs, hlens = pad_packed_sequence(xs, batch_first=True)
@@ -267,6 +267,7 @@ class Taco2_AR(nn.Module):
                  input_dim,
                  output_dim,
                  resample_ratio,
+                 stats,
                  ar,
                  encoder_type,
                  hidden_dim,
@@ -285,6 +286,9 @@ class Taco2_AR(nn.Module):
         self.hidden_dim = hidden_dim
         self.output_dim = output_dim
         self.resample_ratio = resample_ratio
+
+        self.register_buffer("target_mean", stats["mean"].float())
+        self.register_buffer("target_scale", stats["scale"].float())
 
         # define encoder
         if encoder_type == "taco2":
@@ -336,7 +340,10 @@ class Taco2_AR(nn.Module):
         # projection layer
         self.proj = torch.nn.Linear(hidden_dim, output_dim)
 
-    def forward(self, features, lens, targets = None):
+    def normalize(self, x):
+        return (x - self.target_mean) / self.target_scale
+
+    def forward(self, features, lens, targets = None, spk_embs = None):
         """Calculate forward propagation.
             Args:
             features: Batch of the sequences of input features (B, Lmax, idim).

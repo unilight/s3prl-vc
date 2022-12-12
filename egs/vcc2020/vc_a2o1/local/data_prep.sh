@@ -91,7 +91,7 @@ if [ ! -e "${eval_scp}" ]; then
         # loop through source speakers
         for srcspk in "${srcspks[@]}"; do
             wavfile="${db_root}/${srcspk}/${number}.wav"
-            [ -e "${wavfile}" ] && echo "${number} ${wavfile}" >> "${eval_scp}"
+            [ -e "${wavfile}" ] && echo "${srcspk}_${number} ${wavfile}" >> "${eval_scp}"
         done 
     done < "${lists_dir}/eval_list.txt"
 fi
