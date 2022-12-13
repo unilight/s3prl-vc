@@ -1,4 +1,3 @@
-
 import logging
 from fastdtw import fastdtw
 import librosa
@@ -11,10 +10,11 @@ from scipy.signal import firwin
 from scipy.signal import lfilter
 from torch._C import ErrorReport
 
-MCEP_DIM=39
-MCEP_ALPHA=0.466
-MCEP_SHIFT=5
-MCEP_FFTL=1024
+MCEP_DIM = 39
+MCEP_ALPHA = 0.466
+MCEP_SHIFT = 5
+MCEP_FFTL = 1024
+
 
 def low_cut_filter(x, fs, cutoff=70):
     """FUNCTION TO APPLY LOW CUT FILTER
@@ -35,6 +35,7 @@ def low_cut_filter(x, fs, cutoff=70):
 
     return lcf_x
 
+
 def spc2npow(spectrogram):
     """Calculate normalized power sequence from spectrogram
     Parameters
@@ -54,6 +55,7 @@ def spc2npow(spectrogram):
     npow = 10.0 * np.log10(npow / meanpow)
 
     return npow
+
 
 def _spvec2pow(specvec):
     """Convert a spectrum envelope into a power
@@ -79,6 +81,7 @@ def _spvec2pow(specvec):
 
     return power
 
+
 def extfrm(data, npow, power_threshold=-20):
     """Extract frame over the power threshold
     Parameters
@@ -99,7 +102,7 @@ def extfrm(data, npow, power_threshold=-20):
 
     T = data.shape[0]
     if T != len(npow):
-        raise("Length of two vectors is different.")
+        raise ("Length of two vectors is different.")
 
     valid_index = np.where(npow > power_threshold)
     extdata = data[valid_index]
@@ -107,10 +110,11 @@ def extfrm(data, npow, power_threshold=-20):
 
     return extdata
 
+
 def world_extract(x, fs, f0min, f0max):
     # scale from [-1, 1] to [-32768, 32767]
     x = x * np.iinfo(np.int16).max
-    
+
     x = np.array(x, dtype=np.float64)
     x = low_cut_filter(x, fs)
 
@@ -131,6 +135,7 @@ def world_extract(x, fs, f0min, f0max):
         "npow": npow,
     }
 
+
 def calculate_mcd_f0(x, y, fs, f0min, f0max):
     """
     x and y must be in range [-1, 1]
@@ -143,7 +148,9 @@ def calculate_mcd_f0(x, y, fs, f0min, f0max):
     # VAD & DTW based on power
     gt_mcep_nonsil_pow = extfrm(gt_feats["mcep"], gt_feats["npow"])
     cvt_mcep_nonsil_pow = extfrm(cvt_feats["mcep"], cvt_feats["npow"])
-    _, path = fastdtw(cvt_mcep_nonsil_pow, gt_mcep_nonsil_pow, dist=scipy.spatial.distance.euclidean)
+    _, path = fastdtw(
+        cvt_mcep_nonsil_pow, gt_mcep_nonsil_pow, dist=scipy.spatial.distance.euclidean
+    )
     twf_pow = np.array(path).T
 
     # MCD using power-based DTW
@@ -158,7 +165,9 @@ def calculate_mcd_f0(x, y, fs, f0min, f0max):
     try:
         gt_mcep_nonsil_f0 = gt_feats["mcep"][gt_nonsil_f0_idx]
         cvt_mcep_nonsil_f0 = cvt_feats["mcep"][cvt_nonsil_f0_idx]
-        _, path = fastdtw(cvt_mcep_nonsil_f0, gt_mcep_nonsil_f0, dist=scipy.spatial.distance.euclidean)
+        _, path = fastdtw(
+            cvt_mcep_nonsil_f0, gt_mcep_nonsil_f0, dist=scipy.spatial.distance.euclidean
+        )
         twf_f0 = np.array(path).T
 
         # f0RMSE, f0CORR using f0-based DTW

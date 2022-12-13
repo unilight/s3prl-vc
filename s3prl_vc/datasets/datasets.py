@@ -17,6 +17,7 @@ from torch.utils.data import Dataset
 
 from s3prl_vc.transform.spectrogram import logmelfilterbank
 
+
 class AudioSCPMelDataset(Dataset):
     """PyTorch compatible audio dataset based on kaldi-stype scp files."""
 

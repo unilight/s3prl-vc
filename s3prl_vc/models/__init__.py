@@ -1,1 +1,1 @@
-from .Taco2_AR import * # NOQA
+from .Taco2_AR import *  # NOQA

@@ -8,6 +8,9 @@
 
 ### 1. pip
 
+```
+pip install s3prl-vc
+```
 
 ### 2. Editable installation with virtualenv
 ```

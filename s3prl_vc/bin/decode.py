@@ -27,21 +27,17 @@ from s3prl_vc.utils.data import pad_list
 from s3prl_vc.utils.plot import plot_generated_and_ref_2d, plot_1d
 from s3prl_vc.vocoder import Vocoder
 
+
 def main():
     """Run decoding process."""
     parser = argparse.ArgumentParser(
-        description=(
-            "Decode with trained model "
-            "(See detail in bin/decode.py)."
-        )
+        description=("Decode with trained model " "(See detail in bin/decode.py).")
     )
     parser.add_argument(
         "--scp",
         type=str,
         required=True,
-        help=(
-            "kaldi-style wav.scp file. "
-        ),
+        help=("kaldi-style wav.scp file. "),
     )
     parser.add_argument(
         "--trg-stats",
@@ -117,7 +113,9 @@ def main():
     # load target stats for denormalization
     config["trg_stats"] = {
         "mean": torch.from_numpy(read_hdf5(args.trg_stats, "mean")).float().to(device),
-        "scale": torch.from_numpy(read_hdf5(args.trg_stats, "scale")).float().to(device),
+        "scale": torch.from_numpy(read_hdf5(args.trg_stats, "scale"))
+        .float()
+        .to(device),
     }
 
     # get dataset
@@ -136,20 +134,18 @@ def main():
     upstream_featurizer.eval()
 
     # get model and load parameters
-    model_class = getattr(
-        s3prl_vc.models,
-        config["model_type"]
-    )
+    model_class = getattr(s3prl_vc.models, config["model_type"])
     model = model_class(
         upstream_featurizer.output_size,
         config["num_mels"],
-        config["sampling_rate"] / config["hop_size"] * upstream_featurizer.downsample_rate / 16000,
+        config["sampling_rate"]
+        / config["hop_size"]
+        * upstream_featurizer.downsample_rate
+        / 16000,
         config["trg_stats"],
-        **config["model_params"]
+        **config["model_params"],
     ).to(device)
-    model.load_state_dict(
-        torch.load(args.checkpoint, map_location="cpu")["model"]
-    )
+    model.load_state_dict(torch.load(args.checkpoint, map_location="cpu")["model"])
     model = model.eval().to(device)
     logging.info(f"Loaded model parameters from {args.checkpoint}.")
 
@@ -160,7 +156,7 @@ def main():
             config["vocoder"]["config"],
             config["vocoder"]["stats"],
             config["trg_stats"],
-            device
+            device,
         )
 
     # start generation
@@ -168,7 +164,7 @@ def main():
         for utt_id, x, mel in dataset:
             xs = torch.from_numpy(x).unsqueeze(0).float().to(device)
             ilens = torch.LongTensor([x.shape[0]]).to(device)
-            
+
             start_time = time.time()
             all_hs, all_hlens = upstream_model(xs, ilens)
             hs, hlens = upstream_featurizer(all_hs, all_hlens)
@@ -183,7 +179,7 @@ def main():
                 out.cpu().numpy(),
                 config["outdir"] + f"/outs/{utt_id}.png",
                 ref=mel,
-                origin="lower"
+                origin="lower",
             )
 
             if not os.path.exists(os.path.join(config["outdir"], "wav")):

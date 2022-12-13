@@ -34,17 +34,19 @@ from s3prl_vc.datasets.datasets import AudioSCPMelDataset
 from s3prl_vc.utils import read_hdf5
 from s3prl_vc.utils.data import pad_list
 from s3prl_vc.vocoder import Vocoder
+
 # from s3prl_vc.utils.model_io import freeze_modules, filter_modules, get_partial_state_dict, transfer_verification, print_new_keys
 
 # set to avoid matplotlib error in CLI environment
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from s3prl_vc.schedulers.schedulers import Linear_schedule_with_warmup
-scheduler_classes = dict(
-    linear_schedule_with_warmup=Linear_schedule_with_warmup
-)
+
+scheduler_classes = dict(linear_schedule_with_warmup=Linear_schedule_with_warmup)
+
 
 class Trainer(object):
     """Customized trainer module for VC training."""
@@ -162,7 +164,7 @@ class Trainer(object):
 
         if os.path.isfile(checkpoint_path):
             model_state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
-            
+
             # first make sure that all modules in `init_mods` are in `checkpoint_path`
             modules = filter_modules(model_state_dict, init_mods)
 
@@ -170,9 +172,7 @@ class Trainer(object):
             partial_state_dict = get_partial_state_dict(model_state_dict, modules)
 
             if partial_state_dict:
-                if transfer_verification(
-                    main_state_dict, partial_state_dict, modules
-                ):
+                if transfer_verification(main_state_dict, partial_state_dict, modules):
                     print_new_keys(partial_state_dict, modules, checkpoint_path)
                     main_state_dict.update(partial_state_dict)
         else:
@@ -183,7 +183,7 @@ class Trainer(object):
             self.model.module.load_state_dict(main_state_dict)
         else:
             self.model.load_state_dict(main_state_dict)
-    
+
     def freeze_modules(self, freeze_mods):
         if self.config["distributed"]:
             freeze_modules(self.model.module, freeze_mods)
@@ -193,7 +193,9 @@ class Trainer(object):
     def _train_step(self, batch):
         """Train model one step."""
         # parse batch
-        xs, ilens, ys, olens, spembs = tuple([_.to(self.device) if _ is not None else _ for _ in batch])
+        xs, ilens, ys, olens, spembs = tuple(
+            [_.to(self.device) if _ is not None else _ for _ in batch]
+        )
 
         # upstream forward
         with torch.no_grad():
@@ -201,16 +203,18 @@ class Trainer(object):
         hs, hlens = self.upstream_featurizer(all_hs, all_hlens)
 
         # model forward
-        outs, outs_lens = self.model(hs, hlens, targets=ys, spk_embs=spembs)        
+        outs, outs_lens = self.model(hs, hlens, targets=ys, spk_embs=spembs)
 
         # normalize output
-        outs = (outs - self.config["trg_stats"]["mean"]) / self.config["trg_stats"]["scale"]
+        outs = (outs - self.config["trg_stats"]["mean"]) / self.config["trg_stats"][
+            "scale"
+        ]
         ys = (ys - self.config["trg_stats"]["mean"]) / self.config["trg_stats"]["scale"]
 
         # main loss
         gen_loss = self.criterion["main"](outs, outs_lens, ys, olens, self.device)
         self.total_train_loss["train/main"] += gen_loss.item()
-        
+
         self.total_train_loss["train/loss"] += gen_loss.item()
 
         # update model
@@ -218,7 +222,8 @@ class Trainer(object):
         gen_loss.backward()
         if self.config["grad_norm"] > 0:
             torch.nn.utils.clip_grad_norm_(
-                list(self.model.parameters()) + list(self.upstream_featurizer.parameters()),
+                list(self.model.parameters())
+                + list(self.upstream_featurizer.parameters()),
                 self.config["grad_norm"],
             )
         self.optimizer.step()
@@ -291,7 +296,9 @@ class Trainer(object):
         """Generate and save intermediate result."""
 
         # define function for plot prob and att_ws
-        def _plot_and_save(array, figname, figsize=(6, 4), dpi=150, ref=None, origin="upper"):
+        def _plot_and_save(
+            array, figname, figsize=(6, 4), dpi=150, ref=None, origin="upper"
+        ):
             shape = array.shape
             if len(shape) == 1:
                 # for eos probability
@@ -320,7 +327,9 @@ class Trainer(object):
             elif len(shape) == 4:
                 # for transformer attention weights,
                 # whose shape is (#leyers, #heads, out_length, in_length)
-                plt.figure(figsize=(figsize[0] * shape[0], figsize[1] * shape[1]), dpi=dpi)
+                plt.figure(
+                    figsize=(figsize[0] * shape[0], figsize[1] * shape[1]), dpi=dpi
+                )
                 for idx1, xs in enumerate(array):
                     for idx2, x in enumerate(xs, 1):
                         plt.subplot(shape[0], shape[1], idx1 * shape[1] + idx2)
@@ -342,9 +351,12 @@ class Trainer(object):
             os.makedirs(dirname)
 
         # prepare input
-        xs, ilens, ys, olens, spembs = tuple([_.to(self.device) if _ is not None else _ for _ in batch])
-        if spembs is None: spembs = [None] * len(xs)
-        
+        xs, ilens, ys, olens, spembs = tuple(
+            [_.to(self.device) if _ is not None else _ for _ in batch]
+        )
+        if spembs is None:
+            spembs = [None] * len(xs)
+
         # generate
         with torch.no_grad():
             all_hs, all_hlens = self.upstream_model(xs, ilens)
@@ -358,7 +370,7 @@ class Trainer(object):
                 out.cpu().numpy(),
                 dirname + f"/outs/{idx}_out.png",
                 ref=y.cpu().numpy(),
-                origin="lower"
+                origin="lower",
             )
 
             if self.vocoder is not None:
@@ -371,7 +383,7 @@ class Trainer(object):
                     sr,
                     "PCM_16",
                 )
-            
+
             if idx >= self.config["num_save_intermediate_results"]:
                 break
 
@@ -412,10 +424,10 @@ class Collater(object):
     """Customized collater for Pytorch DataLoader in training."""
 
     def __init__(self):
-        """Initialize customized collater for PyTorch DataLoader. """
+        """Initialize customized collater for PyTorch DataLoader."""
 
     def __call__(self, batch):
-        """Convert into batch tensors. """
+        """Convert into batch tensors."""
 
         xs, ys = [b[0] for b in batch], [b[1] for b in batch]
 
@@ -433,33 +445,25 @@ class Collater(object):
 def main():
     """Run training process."""
     parser = argparse.ArgumentParser(
-        description=(
-            "Train VC model (See detail in bin/vc_train.py)."
-        )
+        description=("Train VC model (See detail in bin/vc_train.py).")
     )
     parser.add_argument(
         "--upstream",
         required=True,
         type=str,
-        help=(
-            "upstream model name. "
-        ),
+        help=("upstream model name. "),
     )
     parser.add_argument(
         "--train-scp",
         required=True,
         type=str,
-        help=(
-            "directory including training wav scp. "
-        ),
+        help=("directory including training wav scp. "),
     )
     parser.add_argument(
         "--dev-scp",
         required=True,
         type=str,
-        help=(
-            "directory including source development data. "
-        ),
+        help=("directory including source development data. "),
     )
     parser.add_argument(
         "--trg-stats",
@@ -581,7 +585,9 @@ def main():
     # load target stats for denormalization
     config["trg_stats"] = {
         "mean": torch.from_numpy(read_hdf5(args.trg_stats, "mean")).float().to(device),
-        "scale": torch.from_numpy(read_hdf5(args.trg_stats, "scale")).float().to(device),
+        "scale": torch.from_numpy(read_hdf5(args.trg_stats, "scale"))
+        .float()
+        .to(device),
     }
 
     # get dataset
@@ -653,9 +659,12 @@ def main():
     model = model_class(
         upstream_featurizer.output_size,
         config["num_mels"],
-        config["sampling_rate"] / config["hop_size"] * upstream_featurizer.downsample_rate / 16000,
+        config["sampling_rate"]
+        / config["hop_size"]
+        * upstream_featurizer.downsample_rate
+        / 16000,
         config["trg_stats"],
-        **config["model_params"]
+        **config["model_params"],
     ).to(device)
 
     # load vocoder
@@ -665,7 +674,7 @@ def main():
             config["vocoder"]["config"],
             config["vocoder"]["stats"],
             config["trg_stats"],
-            device
+            device,
         )
     else:
         vocoder = None
@@ -692,7 +701,9 @@ def main():
         list(model.parameters()) + list(upstream_featurizer.parameters()),
         **config["optimizer_params"],
     )
-    scheduler_class = scheduler_classes.get(config.get("scheduler_type", "linear_schedule_with_warmup"))
+    scheduler_class = scheduler_classes.get(
+        config.get("scheduler_type", "linear_schedule_with_warmup")
+    )
     scheduler = scheduler_class(
         optimizer=optimizer,
         num_training_steps=config["train_max_steps"],
@@ -734,7 +745,9 @@ def main():
 
     # load pretrained parameters from checkpoint
     if len(args.init_checkpoint) != 0:
-        trainer.load_trained_modules(args.init_checkpoint, init_mods=config["init-mods"])
+        trainer.load_trained_modules(
+            args.init_checkpoint, init_mods=config["init-mods"]
+        )
         logging.info(f"Successfully load parameters from {args.init_checkpoint}.")
 
     # resume from checkpoint
