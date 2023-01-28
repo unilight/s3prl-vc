@@ -2,9 +2,11 @@ PYTHON:= python
 CUDA_VERSION:= 11.2
 PYTORCH_VERSION:= 1.13
 DOT:= .
-.PHONY: all clean show_variables
+.PHONY: all clean show_variables s3prl_vc
 
 all: show_variables virtualenv.done pytorch.done s3prl_vc.done
+
+s3prl_vc: s3prl_vc.done
 
 show_variables:
 	@echo PYTHON=$(PYTHON)

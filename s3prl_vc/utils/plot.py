@@ -27,23 +27,27 @@ def plot_attention(array, figname, figsize=(6, 4), dpi=150, origin="upper"):
 
 
 def plot_generated_and_ref_2d(
-    array, figname, figsize=(6, 4), dpi=150, ref=None, origin="upper"
+    array, figname, figsize=(6, 4), dpi=150, ref=None, origin="upper",
+    xlabel="Frame", ylabel="Freqeuency"
 ):
     if ref is None:
         plt.figure(figsize=figsize, dpi=dpi)
         plt.imshow(array.T, aspect="auto", origin=origin)
-        plt.xlabel("Frame")
-        plt.ylabel("Frequency")
+        plt.xlabel(xlabel)
+        plt.ylabel(ylabel)
+        plt.title("Generated")
     else:
         plt.figure(figsize=(figsize[0] * 2, figsize[1]), dpi=dpi)
         plt.subplot(1, 2, 1)
         plt.imshow(array.T, aspect="auto", origin=origin)
-        plt.xlabel("Frame")
-        plt.ylabel("Frequency")
+        plt.xlabel(xlabel)
+        plt.ylabel(ylabel)
+        plt.title("Generated")
         plt.subplot(1, 2, 2)
         plt.imshow(ref.T, aspect="auto", origin=origin)
-        plt.xlabel("Frame")
-        plt.ylabel("Frequency")
+        plt.xlabel(xlabel)
+        plt.ylabel(ylabel)
+        plt.title("Reference")
 
     plt.tight_layout()
     if not os.path.exists(os.path.dirname(figname)):

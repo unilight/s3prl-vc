@@ -132,3 +132,5 @@ exp/
 downloads/
 data/
 *.done
+*.wav
+*.txt

@@ -35,6 +35,7 @@ from s3prl_vc.utils import read_hdf5
 from s3prl_vc.utils.data import pad_list
 from s3prl_vc.vocoder import Vocoder
 
+# save for future use
 # from s3prl_vc.utils.model_io import freeze_modules, filter_modules, get_partial_state_dict, transfer_verification, print_new_keys
 
 # set to avoid matplotlib error in CLI environment
@@ -130,8 +131,10 @@ class Trainer(object):
         }
         if self.config["distributed"]:
             state_dict["model"] = self.model.module.state_dict()
+            state_dict["featurizer"] = self.upstream_featurizer.module.state_dict()
         else:
             state_dict["model"] = self.model.state_dict()
+            state_dict["featurizer"] = self.upstream_featurizer.state_dict()
 
         if not os.path.exists(os.path.dirname(checkpoint_path)):
             os.makedirs(os.path.dirname(checkpoint_path))
@@ -148,8 +151,10 @@ class Trainer(object):
         state_dict = torch.load(checkpoint_path, map_location="cpu")
         if self.config["distributed"]:
             self.model.module.load_state_dict(state_dict["model"])
+            self.upstream_featurizer.module.load_state_dict(state_dict["upstream_featurizer"])
         else:
             self.model.load_state_dict(state_dict["model"])
+            self.upstream_featurizer.load_state_dict(state_dict["upstream_featurizer"])
         if not load_only_params:
             self.steps = state_dict["steps"]
             self.epochs = state_dict["epochs"]
@@ -193,7 +198,7 @@ class Trainer(object):
     def _train_step(self, batch):
         """Train model one step."""
         # parse batch
-        xs, ilens, ys, olens, spembs = tuple(
+        xs, ilens, ys, olens, spembs, f0s = tuple(
             [_.to(self.device) if _ is not None else _ for _ in batch]
         )
 
@@ -203,7 +208,7 @@ class Trainer(object):
         hs, hlens = self.upstream_featurizer(all_hs, all_hlens)
 
         # model forward
-        outs, outs_lens = self.model(hs, hlens, targets=ys, spk_embs=spembs)
+        outs, outs_lens = self.model(hs, hlens, targets=ys, spk_embs=spembs, f0s=f0s)
 
         # normalize output
         outs = (outs - self.config["trg_stats"]["mean"]) / self.config["trg_stats"][
@@ -351,17 +356,19 @@ class Trainer(object):
             os.makedirs(dirname)
 
         # prepare input
-        xs, ilens, ys, olens, spembs = tuple(
+        xs, ilens, ys, olens, spembs, f0s = tuple(
             [_.to(self.device) if _ is not None else _ for _ in batch]
         )
         if spembs is None:
             spembs = [None] * len(xs)
+        if f0s is None:
+            f0s = [None] * len(xs)
 
         # generate
         with torch.no_grad():
             all_hs, all_hlens = self.upstream_model(xs, ilens)
             hs, hlens = self.upstream_featurizer(all_hs, all_hlens)
-            outs, _ = self.model(hs, hlens, spk_embs=spembs)
+            outs, _ = self.model(hs, hlens, spk_embs=spembs, f0s=f0s)
 
         for idx, (out, olen, y) in enumerate(zip(outs, olens, ys)):
             out = out[:olen]
@@ -423,13 +430,15 @@ class Trainer(object):
 class Collater(object):
     """Customized collater for Pytorch DataLoader in training."""
 
-    def __init__(self):
+    def __init__(self, use_f0=False):
         """Initialize customized collater for PyTorch DataLoader."""
+        self.use_f0 = use_f0
 
     def __call__(self, batch):
         """Convert into batch tensors."""
 
-        xs, ys = [b[0] for b in batch], [b[1] for b in batch]
+        xs = [b["audio"] for b in batch]
+        ys = [b["mel"] for b in batch]
 
         # get list of lengths (must be tensor for DataParallel)
         ilens = torch.from_numpy(np.array([x.shape[0] for x in xs])).long()
@@ -439,7 +448,13 @@ class Collater(object):
         xs = pad_list([torch.from_numpy(x).float() for x in xs], 0)
         ys = pad_list([torch.from_numpy(y).float() for y in ys], 0)
 
-        return xs, ilens, ys, olens, None
+        if self.use_f0:
+            f0s = [b["f0"] for b in batch]
+            f0s = pad_list([torch.from_numpy(f0).float() for f0 in f0s], 0)
+        else:
+            f0s = None
+
+        return xs, ilens, ys, olens, None, f0s
 
 
 def main():
@@ -591,15 +606,41 @@ def main():
     }
 
     # get dataset
-    train_dataset = AudioSCPMelDataset(
-        args.train_scp,
-        config,
-    )
+    if config.get("use_f0", False):
+        train_dataset = AudioSCPMelDataset(
+            args.train_scp,
+            config,
+            extract_f0=config.get("use_f0", False),
+            f0_extractor=config.get("f0_extractor", "world"),
+            f0_min=read_hdf5(args.trg_stats, "f0_min"), # for world f0 extraction
+            f0_max=read_hdf5(args.trg_stats, "f0_max"), # for world f0 extraction
+            log_f0=config.get("log_f0", True),
+            f0_normalize=config.get("f0_normalize", False),
+            f0_mean=read_hdf5(args.trg_stats, "lf0_mean"), # for speaker normalization
+            f0_scale=read_hdf5(args.trg_stats, "lf0_scale"), # for speaker normalization
+        )
+        dev_dataset = AudioSCPMelDataset(
+            args.dev_scp,
+            config,
+            extract_f0=config.get("use_f0", False),
+            f0_extractor=config.get("f0_extractor", "world"),
+            f0_min=read_hdf5(args.trg_stats, "f0_min"), # for world f0 extraction
+            f0_max=read_hdf5(args.trg_stats, "f0_max"), # for world f0 extraction
+            log_f0=config.get("log_f0", True),
+            f0_normalize=config.get("f0_normalize", False),
+            f0_mean=read_hdf5(args.trg_stats, "lf0_mean"), # for speaker normalization
+            f0_scale=read_hdf5(args.trg_stats, "lf0_scale"), # for speaker normalization
+        )
+    else:
+        train_dataset = AudioSCPMelDataset(
+            args.train_scp,
+            config,
+        )
+        dev_dataset = AudioSCPMelDataset(
+            args.dev_scp,
+            config,
+        )
     logging.info(f"The number of training files = {len(train_dataset)}.")
-    dev_dataset = AudioSCPMelDataset(
-        args.dev_scp,
-        config,
-    )
     logging.info(f"The number of development files = {len(dev_dataset)}.")
     dataset = {
         "train": train_dataset,
@@ -607,7 +648,7 @@ def main():
     }
 
     # get data loader
-    collater = Collater()
+    collater = Collater(use_f0=config.get("use_f0", False))
     sampler = {"train": None, "dev": None}
     if args.distributed:
         # setup sampler for distributed training

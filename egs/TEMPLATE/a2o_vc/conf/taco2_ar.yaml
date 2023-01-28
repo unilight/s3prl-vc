@@ -1,0 +1,78 @@
+###########################################################
+#                FEATURE EXTRACTION SETTING               #
+###########################################################
+sampling_rate: 24000     # Sampling rate.
+fft_size: 1024           # FFT size.
+hop_size: 256            # Hop size.
+win_length: null         # Window length.
+                         # If set to null, it will be the same as fft_size.
+window: "hann"           # Window function.
+num_mels: 80             # Number of mel basis.
+fmin: 80                 # Minimum freq in mel basis calculation.
+fmax: 7600               # Maximum frequency in mel basis calculation.
+global_gain_scale: 1.0   # Will be multiplied to all of waveform.
+trim_silence: false      # Whether to trim the start and end of silence.
+trim_threshold_in_db: 60 # Need to tune carefully if the recording is not good.
+trim_frame_size: 2048    # Frame size in trimming.
+trim_hop_size: 512       # Hop size in trimming.
+
+###########################################################
+#              NETWORK ARCHITECTURE SETTING               #
+###########################################################
+model_type: "Taco2_AR"
+model_params:
+    ar: True
+    encoder_type: "taco2"
+    hidden_dim: 1024
+    prenet_layers: 2  # if set 0, only dropout is applied
+    prenet_dim: 256
+    prenet_dropout_rate: 0.5
+    lstmp_layers: 2
+    lstmp_dropout_rate: 0.2
+    lstmp_proj_dim: 256
+    lstmp_layernorm: False
+
+###########################################################
+#                      LOSS SETTING                       #
+###########################################################
+main_loss_type: "L1Loss"
+
+###########################################################
+#                   INFERENCE SETTING                     #
+###########################################################
+vocoder:
+    checkpoint: ./downloads/pwg_task1/checkpoint-400000steps.pkl
+    config: ./downloads/pwg_task1/config.yml
+    stats: ./downloads/pwg_task1/stats.h5
+
+###########################################################
+#                  DATA LOADER SETTING                    #
+###########################################################
+batch_size: 6             # Batch size.
+pin_memory: true            # Whether to pin memory in Pytorch DataLoader.
+num_workers: 2              # Number of workers in Pytorch DataLoader.
+allow_cache: true           # Whether to allow cache in dataset. If true, it requires cpu memory.
+
+###########################################################
+#             OPTIMIZER & SCHEDULER SETTING               #
+###########################################################
+optimizer_type: AdamW
+optimizer_params:
+    lr: 1.0e-4
+grad_norm: 1.0              # Gradient norm.
+scheduler: linear_schedule_with_warmup
+scheduler_params:
+    num_warmup_steps: 4000      # Scheduler warm up step
+
+###########################################################
+#                    INTERVAL SETTING                     #
+###########################################################
+train_max_steps: 10000                 # Number of training steps.
+save_interval_steps: 1000              # Interval steps to save checkpoint.
+eval_interval_steps: 1000              # Interval steps to evaluate the network.
+log_interval_steps: 100                # Interval steps to record the training log.
+
+###########################################################
+#                     OTHER SETTING                       #
+###########################################################
+num_save_intermediate_results: 4  # Number of results to be saved as intermediate results.

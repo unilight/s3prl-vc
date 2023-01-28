@@ -4,7 +4,7 @@
 # Copyright 2019 Tomoki Hayashi
 #  MIT License (https://opensource.org/licenses/MIT)
 
-"""Decode with trained model."""
+"""Decode directly from upstream features with trained model."""
 
 import argparse
 import logging
@@ -21,12 +21,12 @@ from tqdm import tqdm
 from s3prl.nn import S3PRLUpstream, Featurizer
 
 import s3prl_vc.models
-from s3prl_vc.datasets.datasets import AudioSCPMelDataset
+from s3prl_vc.datasets.datasets import FeatDataset
 from s3prl_vc.utils import read_hdf5, write_hdf5
 from s3prl_vc.utils.data import pad_list
 from s3prl_vc.utils.plot import plot_generated_and_ref_2d, plot_1d
 from s3prl_vc.vocoder import Vocoder
-from s3prl_vc.vocoder.griffin_lim import Spectrogram2Waveform
+
 
 def main():
     """Run decoding process."""
@@ -34,17 +34,11 @@ def main():
         description=("Decode with trained model " "(See detail in bin/decode.py).")
     )
     parser.add_argument(
-        "--scp",
-        type=str,
-        default=None,
-        help=("kaldi-style wav.scp file. "),
-    )
-    parser.add_argument(
-        "--wavdir",
-        default=None,
+        "--featdir",
+        required=True,
         type=str,
         help=(
-            "directory including input wav files. you need to specify either scp or wavdir."
+            "directory including input feat files."
         ),
     )
     parser.add_argument(
@@ -134,51 +128,21 @@ def main():
         .to(device),
     }
 
-    # check arguments
-    if (args.scp is not None and args.wavdir is not None) or (
-        args.scp is None and args.wavdir is None
-    ):
-        raise ValueError("Please specify either --wavdir or --scp.")
-
     # get dataset
-    if args.scp is not None:
-        if config.get("use_f0", False):
-            dataset = AudioSCPMelDataset(
-                args.scp,
-                config,
-                extract_f0=config.get("use_f0", False),
-                f0_extractor=config.get("f0_extractor", "world"),
-                f0_min=read_hdf5(args.trg_stats, "f0_min"), # for world f0 extraction
-                f0_max=read_hdf5(args.trg_stats, "f0_max"), # for world f0 extraction
-                log_f0=config.get("log_f0", True),
-                f0_normalize=config.get("f0_normalize", False),
-                f0_mean=read_hdf5(args.trg_stats, "lf0_mean"), # for speaker normalization
-                f0_scale=read_hdf5(args.trg_stats, "lf0_scale"), # for speaker normalization
-                return_utt_id=True,
-            )
-        else:
-            dataset = AudioSCPMelDataset(
-                args.scp,
-                config,
-                return_utt_id=True,
-            )
-    else:
-        raise NotImplementedError
-        dataset = AudioMelDataset(
-            args.wavdir,
-            config,
-            return_utt_id=True,
-        )
+    dataset = FeatDataset(
+        args.featdir,
+        config,
+        query="*.h5",
+        load_fn=lambda x: read_hdf5(x, args.feat_type),  # NOQA
+        return_utt_id=True,
+    )
         
     logging.info(f"The number of features to be decoded = {len(dataset)}.")
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=len(dataset))
 
     # define upstream model
     upstream_model = S3PRLUpstream(config["upstream"]).to(device)
-    upstream_model.eval()
     upstream_featurizer = Featurizer(upstream_model).to(device)
-    upstream_featurizer.load_state_dict(torch.load(args.checkpoint, map_location="cpu")["featurizer"])
-    upstream_featurizer.eval()
 
     # get model and load parameters
     model_class = getattr(s3prl_vc.models, config["model_type"])
@@ -205,35 +169,17 @@ def main():
             config["trg_stats"],
             device,
         )
-    else:
-        vocoder = Spectrogram2Waveform(
-            stats=config["trg_stats"],
-            n_fft=config["fft_size"],
-            n_shift=config["hop_size"],
-            fs=config["sampling_rate"],
-            n_mels=config["num_mels"],
-            fmin=config["fmin"],
-            fmax=config["fmax"],
-            griffin_lim_iters=64
-        )
 
     # start generation
     with torch.no_grad():
-        for batch in tqdm(dataset):
-            utt_id = batch["utt_id"]
-            x = batch["audio"]
-            mel = batch["mel"]
-            f0s = batch["f0"]
-
+        for items in tqdm(dataset):
+            utt_id = items["utt_id"]
+            x = items["feat"]
             xs = torch.from_numpy(x).unsqueeze(0).float().to(device)
-            if f0s is not None:
-                f0s = torch.from_numpy(f0s).unsqueeze(0).float().to(device)
             ilens = torch.LongTensor([x.shape[0]]).to(device)
 
             start_time = time.time()
-            all_hs, all_hlens = upstream_model(xs, ilens)
-            hs, hlens = upstream_featurizer(all_hs, all_hlens)
-            outs, _ = model(hs, hlens, spk_embs=None, f0s=f0s)
+            outs, _ = model(xs, ilens, spk_embs=None)
             out = outs[0]
             logging.info(
                 "inference speed = %.1f frames / sec."
@@ -243,7 +189,6 @@ def main():
             plot_generated_and_ref_2d(
                 out.cpu().numpy(),
                 config["outdir"] + f"/plot_mel/{utt_id}.png",
-                ref=mel,
                 origin="lower",
             )
 

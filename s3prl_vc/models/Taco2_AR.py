@@ -284,6 +284,15 @@ class RNNCell(nn.Module):
 ################################################################################
 
 
+def Embedding(num_embeddings, embedding_dim, padding_idx=None):
+    m = nn.Embedding(num_embeddings, embedding_dim, padding_idx=padding_idx)
+    nn.init.normal_(m.weight, mean=0, std=embedding_dim**-0.5)
+    return m
+
+
+################################################################################
+
+
 class Taco2_AR(nn.Module):
     def __init__(
         self,
@@ -291,6 +300,7 @@ class Taco2_AR(nn.Module):
         output_dim,
         resample_ratio,
         stats,
+        # model params below
         ar,
         encoder_type,
         hidden_dim,
@@ -301,6 +311,16 @@ class Taco2_AR(nn.Module):
         prenet_layers=2,
         prenet_dim=256,
         prenet_dropout_rate=0.5,
+        use_f0=False,
+        f0_emb_dim=256,
+        f0_emb_integration_type="add",
+        f0_quantize=True,
+        f0_bins=256,
+        f0_min=0,
+        f0_max=1,
+        f0_gaussian_blur=False,
+        f0_emb_kernel_size=9,
+        f0_emb_dropout=0.5,
         **kwargs
     ):
         super(Taco2_AR, self).__init__()
@@ -310,6 +330,10 @@ class Taco2_AR(nn.Module):
         self.hidden_dim = hidden_dim
         self.output_dim = output_dim
         self.resample_ratio = resample_ratio
+        self.use_f0 = use_f0
+        self.f0_quantize = f0_quantize
+        self.f0_gaussian_blur = f0_gaussian_blur
+        self.f0_emb_integration_type = f0_emb_integration_type
 
         self.register_buffer("target_mean", stats["mean"].float())
         self.register_buffer("target_scale", stats["scale"].float())
@@ -363,10 +387,36 @@ class Taco2_AR(nn.Module):
         # projection layer
         self.proj = torch.nn.Linear(hidden_dim, output_dim)
 
+        # f0 related
+        if use_f0:
+            if f0_quantize:
+                self.f0_bins = torch.linspace(f0_min, f0_max, f0_bins)
+                self.f0_emb = Embedding(f0_bins, f0_emb_dim)
+            else:
+                self.f0_emb = torch.nn.Sequential(
+                    torch.nn.Conv1d(
+                        in_channels=1,
+                        out_channels=f0_emb_dim,
+                        kernel_size=f0_emb_kernel_size,
+                        padding=(f0_emb_kernel_size - 1) // 2,
+                    ),
+                    torch.nn.Dropout(f0_emb_dropout),
+                )
+
+            # define projection layer for integration
+            if self.f0_emb_integration_type == "add":
+                self.f0_emb_projection = torch.nn.Linear(f0_emb_dim, hidden_dim)
+            elif self.f0_emb_integration_type == "concat": 
+                self.f0_emb_projection = torch.nn.Linear(
+                    hidden_dim + f0_emb_dim, hidden_dim
+                )
+            else:
+                raise ValueError("f0_emb_integration_type not supported.")
+
     def normalize(self, x):
         return (x - self.target_mean) / self.target_scale
 
-    def forward(self, features, lens, targets=None, spk_embs=None):
+    def forward(self, features, lens, f0s=None, targets=None, spk_embs=None):
         """Calculate forward propagation.
         Args:
         features: Batch of the sequences of input features (B, Lmax, idim).
@@ -387,6 +437,21 @@ class Taco2_AR(nn.Module):
             )  # (B, Lmax, hidden_dim)
         elif self.encoder_type == "ffn":
             encoder_states = self.encoder(resampled_features)  # (B, Lmax, hidden_dim)
+
+        if self.use_f0:
+            assert f0s is not None
+            if self.f0_quantize:
+                raise NotImplementedError
+            else:
+                f0_embs = self.f0_emb(f0s.unsqueeze(1)).transpose(1, 2) # (B, Lmax, hidden_dim)
+            encoder_states, lens = self._integrate_with_emb(encoder_states, lens, f0_embs, self.f0_emb_integration_type, self.f0_emb_projection)
+
+        # if the length of `encoder_states` is longer than that of `targets`, match to that of `targets`.
+        if targets is not None and targets.shape[1] < encoder_states.shape[1]:
+            encoder_states = encoder_states[:, :targets.shape[1]]
+            for i in range(lens.shape[0]):
+                if lens[i] > targets.shape[1]:
+                    lens[i] = targets.shape[1]
 
         # decoder: LSTMP layers & projection
         if self.ar:
@@ -432,3 +497,35 @@ class Taco2_AR(nn.Module):
             predicted = self.proj(predicted)
 
         return predicted, lens
+
+    def _integrate_with_emb(self, hs, lens, embs, type, emb_projection):
+        """Integrate speaker/f0 embedding with hidden states.
+            Args:
+                hs (Tensor): Batch of hidden state sequences (B, Lmax, hdim).
+                lens (Tensor): Batch of lengths of the hidden state sequences (B).
+                embs (Tensor): Batch of speaker/f0 embeddings (B, embed_dim) or (B, Lmax, embed_dim).
+                type (string): "add" or "concat"
+                projection (nn.Module)
+        """
+        # length adjustment
+        if len(embs.shape) > 2:
+            if embs.shape[1] > hs.shape[1]:
+                embs = embs[:, :hs.shape[1]]
+            if hs.shape[1] > embs.shape[1]:
+                hs = hs[:, :embs.shape[1]]
+                lens = torch.where(lens > embs.shape[1], embs.shape[1], lens) # NOTE(unilight): modify lens if hs is also modified
+        else:
+            embs = embs.unsqueeze(1)
+
+        if type == "add":
+            # apply projection and then add to hidden states
+            embs = emb_projection(F.normalize(embs, dim=-1))
+            hs = hs + embs
+        elif type == "concat":
+            # concat hidden states with spk embeds and then apply projection
+            embs = F.normalize(embs, dim=-1).expand(-1, hs.size(1), -1)
+            hs = emb_projection(torch.cat([hs, embs], dim=-1))
+        else:
+            raise NotImplementedError("support only add or concat.")
+
+        return hs, lens
