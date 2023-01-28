@@ -37,9 +37,7 @@ def main():
         "--featdir",
         required=True,
         type=str,
-        help=(
-            "directory including input feat files."
-        ),
+        help=("directory including input feat files."),
     )
     parser.add_argument(
         "--trg-stats",
@@ -72,9 +70,7 @@ def main():
         "--feat_type",
         type=str,
         default="feats",
-        help=(
-            "feature type. this is used as key name to read h5 featyre files. "
-        ),
+        help=("feature type. this is used as key name to read h5 featyre files. "),
     )
     parser.add_argument(
         "--verbose",
@@ -136,7 +132,7 @@ def main():
         load_fn=lambda x: read_hdf5(x, args.feat_type),  # NOQA
         return_utt_id=True,
     )
-        
+
     logging.info(f"The number of features to be decoded = {len(dataset)}.")
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=len(dataset))
 

@@ -96,8 +96,8 @@ def main():
     if args.f0:
         with open(args.f0_path) as f:
             f0_config = yaml.load(f, Loader=yaml.Loader)
-            f0min=f0_config[args.spk]["f0min"]
-            f0max=f0_config[args.spk]["f0max"]
+            f0min = f0_config[args.spk]["f0min"]
+            f0max = f0_config[args.spk]["f0max"]
 
     # check directory existence
     if not os.path.exists(args.dumpdir):
@@ -144,7 +144,7 @@ def main():
         minmaxscaler = MinMaxScaler()
         for items in tqdm(dataset):
             f0 = items["f0"]
-            f0 = f0[f0>0]
+            f0 = f0[f0 > 0]
             scaler.partial_fit(f0.reshape([-1, 1]))
             minmaxscaler.partial_fit(f0.reshape([-1, 1]))
 

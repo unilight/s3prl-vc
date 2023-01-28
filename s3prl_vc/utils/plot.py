@@ -27,8 +27,14 @@ def plot_attention(array, figname, figsize=(6, 4), dpi=150, origin="upper"):
 
 
 def plot_generated_and_ref_2d(
-    array, figname, figsize=(6, 4), dpi=150, ref=None, origin="upper",
-    xlabel="Frame", ylabel="Freqeuency"
+    array,
+    figname,
+    figsize=(6, 4),
+    dpi=150,
+    ref=None,
+    origin="upper",
+    xlabel="Frame",
+    ylabel="Freqeuency",
 ):
     if ref is None:
         plt.figure(figsize=figsize, dpi=dpi)

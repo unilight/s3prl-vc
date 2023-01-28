@@ -30,7 +30,17 @@ def get_yaapt_f0(audio, rate=16000, frame_length=1024, frame_shift=256, interp=F
     else:
         return pitch.samp_values
 
-def get_world_f0(x, fs, algorithm="dio", f0min=40, f0max=500, frame_length=1024, frame_shift=256, interp=False):
+
+def get_world_f0(
+    x,
+    fs,
+    algorithm="dio",
+    f0min=40,
+    f0max=500,
+    frame_length=1024,
+    frame_shift=256,
+    interp=False,
+):
     frame_shift_ms = int(frame_shift / fs * 1000)
     x = x * np.iinfo(np.int16).max
     x = np.array(x, dtype=np.float64)
@@ -41,8 +51,6 @@ def get_world_f0(x, fs, algorithm="dio", f0min=40, f0max=500, frame_length=1024,
         f = pw.harvest
     elif algorithm == "dio":
         f = pw.dio
-    f0, _ = f(
-        x, fs, f0_floor=f0min, f0_ceil=f0max, frame_period=frame_shift_ms
-    )
+    f0, _ = f(x, fs, f0_floor=f0min, f0_ceil=f0max, frame_period=frame_shift_ms)
 
     return f0

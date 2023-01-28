@@ -28,6 +28,7 @@ from s3prl_vc.utils.plot import plot_generated_and_ref_2d, plot_1d
 from s3prl_vc.vocoder import Vocoder
 from s3prl_vc.vocoder.griffin_lim import Spectrogram2Waveform
 
+
 def main():
     """Run decoding process."""
     parser = argparse.ArgumentParser(
@@ -78,9 +79,7 @@ def main():
         "--feat_type",
         type=str,
         default="feats",
-        help=(
-            "feature type. this is used as key name to read h5 featyre files. "
-        ),
+        help=("feature type. this is used as key name to read h5 featyre files. "),
     )
     parser.add_argument(
         "--verbose",
@@ -148,12 +147,16 @@ def main():
                 config,
                 extract_f0=config.get("use_f0", False),
                 f0_extractor=config.get("f0_extractor", "world"),
-                f0_min=read_hdf5(args.trg_stats, "f0_min"), # for world f0 extraction
-                f0_max=read_hdf5(args.trg_stats, "f0_max"), # for world f0 extraction
+                f0_min=read_hdf5(args.trg_stats, "f0_min"),  # for world f0 extraction
+                f0_max=read_hdf5(args.trg_stats, "f0_max"),  # for world f0 extraction
                 log_f0=config.get("log_f0", True),
                 f0_normalize=config.get("f0_normalize", False),
-                f0_mean=read_hdf5(args.trg_stats, "lf0_mean"), # for speaker normalization
-                f0_scale=read_hdf5(args.trg_stats, "lf0_scale"), # for speaker normalization
+                f0_mean=read_hdf5(
+                    args.trg_stats, "lf0_mean"
+                ),  # for speaker normalization
+                f0_scale=read_hdf5(
+                    args.trg_stats, "lf0_scale"
+                ),  # for speaker normalization
                 return_utt_id=True,
             )
         else:
@@ -169,7 +172,7 @@ def main():
             config,
             return_utt_id=True,
         )
-        
+
     logging.info(f"The number of features to be decoded = {len(dataset)}.")
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=len(dataset))
 
@@ -177,7 +180,9 @@ def main():
     upstream_model = S3PRLUpstream(config["upstream"]).to(device)
     upstream_model.eval()
     upstream_featurizer = Featurizer(upstream_model).to(device)
-    upstream_featurizer.load_state_dict(torch.load(args.checkpoint, map_location="cpu")["featurizer"])
+    upstream_featurizer.load_state_dict(
+        torch.load(args.checkpoint, map_location="cpu")["featurizer"]
+    )
     upstream_featurizer.eval()
 
     # get model and load parameters
@@ -214,7 +219,7 @@ def main():
             n_mels=config["num_mels"],
             fmin=config["fmin"],
             fmax=config["fmax"],
-            griffin_lim_iters=64
+            griffin_lim_iters=64,
         )
 
     # start generation

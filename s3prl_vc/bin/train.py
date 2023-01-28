@@ -151,7 +151,9 @@ class Trainer(object):
         state_dict = torch.load(checkpoint_path, map_location="cpu")
         if self.config["distributed"]:
             self.model.module.load_state_dict(state_dict["model"])
-            self.upstream_featurizer.module.load_state_dict(state_dict["upstream_featurizer"])
+            self.upstream_featurizer.module.load_state_dict(
+                state_dict["upstream_featurizer"]
+            )
         else:
             self.model.load_state_dict(state_dict["model"])
             self.upstream_featurizer.load_state_dict(state_dict["upstream_featurizer"])
@@ -612,24 +614,28 @@ def main():
             config,
             extract_f0=config.get("use_f0", False),
             f0_extractor=config.get("f0_extractor", "world"),
-            f0_min=read_hdf5(args.trg_stats, "f0_min"), # for world f0 extraction
-            f0_max=read_hdf5(args.trg_stats, "f0_max"), # for world f0 extraction
+            f0_min=read_hdf5(args.trg_stats, "f0_min"),  # for world f0 extraction
+            f0_max=read_hdf5(args.trg_stats, "f0_max"),  # for world f0 extraction
             log_f0=config.get("log_f0", True),
             f0_normalize=config.get("f0_normalize", False),
-            f0_mean=read_hdf5(args.trg_stats, "lf0_mean"), # for speaker normalization
-            f0_scale=read_hdf5(args.trg_stats, "lf0_scale"), # for speaker normalization
+            f0_mean=read_hdf5(args.trg_stats, "lf0_mean"),  # for speaker normalization
+            f0_scale=read_hdf5(
+                args.trg_stats, "lf0_scale"
+            ),  # for speaker normalization
         )
         dev_dataset = AudioSCPMelDataset(
             args.dev_scp,
             config,
             extract_f0=config.get("use_f0", False),
             f0_extractor=config.get("f0_extractor", "world"),
-            f0_min=read_hdf5(args.trg_stats, "f0_min"), # for world f0 extraction
-            f0_max=read_hdf5(args.trg_stats, "f0_max"), # for world f0 extraction
+            f0_min=read_hdf5(args.trg_stats, "f0_min"),  # for world f0 extraction
+            f0_max=read_hdf5(args.trg_stats, "f0_max"),  # for world f0 extraction
             log_f0=config.get("log_f0", True),
             f0_normalize=config.get("f0_normalize", False),
-            f0_mean=read_hdf5(args.trg_stats, "lf0_mean"), # for speaker normalization
-            f0_scale=read_hdf5(args.trg_stats, "lf0_scale"), # for speaker normalization
+            f0_mean=read_hdf5(args.trg_stats, "lf0_mean"),  # for speaker normalization
+            f0_scale=read_hdf5(
+                args.trg_stats, "lf0_scale"
+            ),  # for speaker normalization
         )
     else:
         train_dataset = AudioSCPMelDataset(

@@ -23,6 +23,7 @@ from s3prl_vc.utils import find_files, get_basename
 # Datasets with audio #
 ##########################
 
+
 class AudioSCPMelDataset(Dataset):
     """PyTorch compatible audio dataset based on kaldi-stype scp files."""
 
@@ -150,7 +151,7 @@ class AudioSCPMelDataset(Dataset):
                     rate=self.config["sampling_rate"],
                     frame_length=self.config["fft_size"],
                     frame_shift=self.config["hop_size"],
-                    interp=self.config["f0_interp"]
+                    interp=self.config["f0_interp"],
                 )
             elif self.f0_extractor == "world":
                 f0 = get_world_f0(
@@ -160,7 +161,7 @@ class AudioSCPMelDataset(Dataset):
                     f0max=self.f0_max,
                     frame_length=self.config["fft_size"],
                     frame_shift=self.config["hop_size"],
-                    interp=self.config["f0_interp"]
+                    interp=self.config["f0_interp"],
                 )
 
             else:
@@ -172,7 +173,7 @@ class AudioSCPMelDataset(Dataset):
                 f0 = lf0
             if self.f0_normalize:
                 # f0 = (f0 - self.f0_mean) / self.f0_scale
-                f0 = (f0 - self.f0_mean)
+                f0 = f0 - self.f0_mean
 
         # always resample to 16kHz
         audio = librosa.resample(audio, orig_sr=fs, target_sr=16000)
@@ -206,9 +207,11 @@ class AudioSCPMelDataset(Dataset):
         """
         return len(self.utt_ids)
 
+
 ##########################
 # Datasets without audio #
 ##########################
+
 
 class FeatDataset(Dataset):
     """PyTorch compatible dataset given a directory of feature files."""
@@ -236,7 +239,7 @@ class FeatDataset(Dataset):
         self.config = config
         self.load_fn = load_fn
 
-        # find files 
+        # find files
         self.feat_files = sorted(find_files(featdir, query=query))
         self.utt_ids = [get_basename(path) for path in self.feat_files]
 

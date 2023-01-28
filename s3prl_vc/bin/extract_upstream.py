@@ -72,9 +72,7 @@ def main():
         "--feat_type",
         type=str,
         default="feats",
-        help=(
-            "feature type. this is used as key name to read h5 featyre files. "
-        ),
+        help=("feature type. this is used as key name to read h5 featyre files. "),
     )
     parser.add_argument(
         "--verbose",
@@ -139,7 +137,7 @@ def main():
             config,
             return_utt_id=True,
         )
-        
+
     logging.info(f"The number of files to be extracted = {len(dataset)}.")
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=len(dataset))
 
@@ -147,7 +145,9 @@ def main():
     upstream_model = S3PRLUpstream(config["upstream"]).to(device)
     upstream_model.eval()
     upstream_featurizer = Featurizer(upstream_model).to(device)
-    upstream_featurizer.load_state_dict(torch.load(args.checkpoint, map_location="cpu")["featurizer"])
+    upstream_featurizer.load_state_dict(
+        torch.load(args.checkpoint, map_location="cpu")["featurizer"]
+    )
     upstream_featurizer.eval()
     logging.info(f"Loaded model parameters from {args.checkpoint}.")
 
@@ -170,13 +170,16 @@ def main():
 
             # write feats
             if not os.path.exists(os.path.join(config["outdir"], args.feat_type)):
-                os.makedirs(os.path.join(config["outdir"], args.feat_type), exist_ok=True)
+                os.makedirs(
+                    os.path.join(config["outdir"], args.feat_type), exist_ok=True
+                )
 
             write_hdf5(
                 config["outdir"] + f"/{args.feat_type}/{utt_id}.h5",
                 args.feat_type,
                 h.cpu().numpy().astype(np.float32),
             )
+
 
 if __name__ == "__main__":
     main()

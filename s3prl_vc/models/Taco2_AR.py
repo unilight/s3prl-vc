@@ -406,7 +406,7 @@ class Taco2_AR(nn.Module):
             # define projection layer for integration
             if self.f0_emb_integration_type == "add":
                 self.f0_emb_projection = torch.nn.Linear(f0_emb_dim, hidden_dim)
-            elif self.f0_emb_integration_type == "concat": 
+            elif self.f0_emb_integration_type == "concat":
                 self.f0_emb_projection = torch.nn.Linear(
                     hidden_dim + f0_emb_dim, hidden_dim
                 )
@@ -443,12 +443,20 @@ class Taco2_AR(nn.Module):
             if self.f0_quantize:
                 raise NotImplementedError
             else:
-                f0_embs = self.f0_emb(f0s.unsqueeze(1)).transpose(1, 2) # (B, Lmax, hidden_dim)
-            encoder_states, lens = self._integrate_with_emb(encoder_states, lens, f0_embs, self.f0_emb_integration_type, self.f0_emb_projection)
+                f0_embs = self.f0_emb(f0s.unsqueeze(1)).transpose(
+                    1, 2
+                )  # (B, Lmax, hidden_dim)
+            encoder_states, lens = self._integrate_with_emb(
+                encoder_states,
+                lens,
+                f0_embs,
+                self.f0_emb_integration_type,
+                self.f0_emb_projection,
+            )
 
         # if the length of `encoder_states` is longer than that of `targets`, match to that of `targets`.
         if targets is not None and targets.shape[1] < encoder_states.shape[1]:
-            encoder_states = encoder_states[:, :targets.shape[1]]
+            encoder_states = encoder_states[:, : targets.shape[1]]
             for i in range(lens.shape[0]):
                 if lens[i] > targets.shape[1]:
                     lens[i] = targets.shape[1]
@@ -500,20 +508,22 @@ class Taco2_AR(nn.Module):
 
     def _integrate_with_emb(self, hs, lens, embs, type, emb_projection):
         """Integrate speaker/f0 embedding with hidden states.
-            Args:
-                hs (Tensor): Batch of hidden state sequences (B, Lmax, hdim).
-                lens (Tensor): Batch of lengths of the hidden state sequences (B).
-                embs (Tensor): Batch of speaker/f0 embeddings (B, embed_dim) or (B, Lmax, embed_dim).
-                type (string): "add" or "concat"
-                projection (nn.Module)
+        Args:
+            hs (Tensor): Batch of hidden state sequences (B, Lmax, hdim).
+            lens (Tensor): Batch of lengths of the hidden state sequences (B).
+            embs (Tensor): Batch of speaker/f0 embeddings (B, embed_dim) or (B, Lmax, embed_dim).
+            type (string): "add" or "concat"
+            projection (nn.Module)
         """
         # length adjustment
         if len(embs.shape) > 2:
             if embs.shape[1] > hs.shape[1]:
-                embs = embs[:, :hs.shape[1]]
+                embs = embs[:, : hs.shape[1]]
             if hs.shape[1] > embs.shape[1]:
-                hs = hs[:, :embs.shape[1]]
-                lens = torch.where(lens > embs.shape[1], embs.shape[1], lens) # NOTE(unilight): modify lens if hs is also modified
+                hs = hs[:, : embs.shape[1]]
+                lens = torch.where(
+                    lens > embs.shape[1], embs.shape[1], lens
+                )  # NOTE(unilight): modify lens if hs is also modified
         else:
             embs = embs.unsqueeze(1)
 
