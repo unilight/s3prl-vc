@@ -24,12 +24,13 @@ from tensorboardX import SummaryWriter
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from s3prl.nn import S3PRLUpstream, Featurizer
+from s3prl.nn import Featurizer
 
 import s3prl_vc
 import s3prl_vc.models
 import s3prl_vc.losses
 
+from s3prl_vc.upstream.interface import get_upstream
 from s3prl_vc.datasets.datasets import AudioSCPMelDataset
 from s3prl_vc.utils import read_hdf5
 from s3prl_vc.utils.data import pad_list
@@ -694,7 +695,7 @@ def main():
     }
 
     # define upstream model
-    upstream_model = S3PRLUpstream(args.upstream).to(device)
+    upstream_model = get_upstream(args.upstream).to(device)
     upstream_model.eval()
     upstream_featurizer = Featurizer(upstream_model).to(device)
 
