@@ -272,7 +272,7 @@ class FeatDataset(Dataset):
 
         items = {
             "utt_id": "",
-            "feats": feats,
+            "feat": feats,
         }
 
         if self.return_utt_id:

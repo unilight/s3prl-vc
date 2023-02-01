@@ -18,10 +18,11 @@ import yaml
 
 from tqdm import tqdm
 
-from s3prl.nn import S3PRLUpstream, Featurizer
+from s3prl.nn import Featurizer
 
 import s3prl_vc.models
-from s3prl_vc.datasets.datasets import AudioSCPMelDataset, AudioMelDataset
+from s3prl_vc.upstream.interface import get_upstream
+from s3prl_vc.datasets.datasets import AudioSCPMelDataset
 from s3prl_vc.utils import read_hdf5, write_hdf5
 from s3prl_vc.utils.data import pad_list
 from s3prl_vc.utils.plot import plot_generated_and_ref_2d, plot_1d
@@ -142,7 +143,7 @@ def main():
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=len(dataset))
 
     # define upstream model
-    upstream_model = S3PRLUpstream(config["upstream"]).to(device)
+    upstream_model = get_upstream(config["upstream"]).to(device)
     upstream_model.eval()
     upstream_featurizer = Featurizer(upstream_model).to(device)
     upstream_featurizer.load_state_dict(
