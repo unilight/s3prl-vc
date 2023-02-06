@@ -311,6 +311,7 @@ class Taco2_AR(nn.Module):
         prenet_layers=2,
         prenet_dim=256,
         prenet_dropout_rate=0.5,
+        # f0 related
         use_f0=False,
         f0_emb_dim=256,
         f0_emb_integration_type="add",
@@ -321,6 +322,10 @@ class Taco2_AR(nn.Module):
         f0_gaussian_blur=False,
         f0_emb_kernel_size=9,
         f0_emb_dropout=0.5,
+        # speaker embedding related
+        use_spemb=False,
+        spk_emb_integration_type="concat",
+        spk_emb_dim=256,
         **kwargs
     ):
         super(Taco2_AR, self).__init__()
@@ -330,10 +335,19 @@ class Taco2_AR(nn.Module):
         self.hidden_dim = hidden_dim
         self.output_dim = output_dim
         self.resample_ratio = resample_ratio
+
+        # f0 related
         self.use_f0 = use_f0
         self.f0_quantize = f0_quantize
         self.f0_gaussian_blur = f0_gaussian_blur
         self.f0_emb_integration_type = f0_emb_integration_type
+
+        # speaker embedding related
+        self.use_spemb = use_spemb
+        self.spk_emb_integration_type = spk_emb_integration_type
+        self.spk_emb_dim = spk_emb_dim
+        if spk_emb_integration_type == "add":
+            assert spk_emb_dim == hidden_dim
 
         self.register_buffer("target_mean", stats["mean"].float())
         self.register_buffer("target_scale", stats["scale"].float())
@@ -413,6 +427,17 @@ class Taco2_AR(nn.Module):
             else:
                 raise ValueError("f0_emb_integration_type not supported.")
 
+        # define projection layer
+        if use_spemb:
+            if self.spk_emb_integration_type == "add":
+                self.spk_emb_projection = torch.nn.Linear(spk_emb_dim, hidden_dim)
+            elif self.spk_emb_integration_type == "concat":
+                self.spk_emb_projection = torch.nn.Linear(
+                    hidden_dim + spk_emb_dim, hidden_dim
+                )
+            else:
+                raise ValueError("Integration type not supported.")
+
     def normalize(self, x):
         return (x - self.target_mean) / self.target_scale
 
@@ -452,6 +477,17 @@ class Taco2_AR(nn.Module):
                 f0_embs,
                 self.f0_emb_integration_type,
                 self.f0_emb_projection,
+            )
+
+        # inject speaker embeddings
+        if self.use_spemb:
+            assert spk_embs is not None
+            encoder_states, lens = self._integrate_with_emb(
+                encoder_states,
+                lens,
+                spk_embs,
+                self.spk_emb_integration_type,
+                self.spk_emb_projection,
             )
 
         # if the length of `encoder_states` is longer than that of `targets`, match to that of `targets`.

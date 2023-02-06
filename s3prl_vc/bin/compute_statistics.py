@@ -106,8 +106,8 @@ def main():
     # get dataset
     if args.f0:
         dataset = AudioSCPMelDataset(
-            args.scp,
             config,
+            args.scp,
             extract_f0=config.get("use_f0", False),
             f0_extractor=config.get("f0_extractor", "world"),
             f0_min=f0min,
@@ -116,8 +116,8 @@ def main():
         )
     else:
         dataset = AudioSCPMelDataset(
-            args.scp,
             config,
+            args.scp,
         )
     logging.info(f"The number of files = {len(dataset)}.")
 

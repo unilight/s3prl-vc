@@ -6,6 +6,9 @@
 
 """Train VC model."""
 
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
+
 import argparse
 import logging
 import os
@@ -433,15 +436,18 @@ class Trainer(object):
 class Collater(object):
     """Customized collater for Pytorch DataLoader in training."""
 
-    def __init__(self, use_f0=False):
+    def __init__(self, use_f0=False, use_spk_emb=False):
         """Initialize customized collater for PyTorch DataLoader."""
         self.use_f0 = use_f0
+        self.use_spk_emb = use_spk_emb
 
     def __call__(self, batch):
         """Convert into batch tensors."""
 
         xs = [b["audio"] for b in batch]
         ys = [b["mel"] for b in batch]
+        f0s = None
+        spembs = None
 
         # get list of lengths (must be tensor for DataParallel)
         ilens = torch.from_numpy(np.array([x.shape[0] for x in xs])).long()
@@ -454,10 +460,11 @@ class Collater(object):
         if self.use_f0:
             f0s = [b["f0"] for b in batch]
             f0s = pad_list([torch.from_numpy(f0).float() for f0 in f0s], 0)
-        else:
-            f0s = None
 
-        return xs, ilens, ys, olens, None, f0s
+        if self.use_spk_emb:
+            spembs = torch.from_numpy(np.stack([b["spemb"] for b in batch], axis=0))
+
+        return xs, ilens, ys, olens, spembs, f0s
 
 
 def main():
@@ -608,45 +615,47 @@ def main():
         .to(device),
     }
 
-    # get dataset
+    # set f0 stats
     if config.get("use_f0", False):
-        train_dataset = AudioSCPMelDataset(
-            args.train_scp,
-            config,
-            extract_f0=config.get("use_f0", False),
-            f0_extractor=config.get("f0_extractor", "world"),
-            f0_min=read_hdf5(args.trg_stats, "f0_min"),  # for world f0 extraction
-            f0_max=read_hdf5(args.trg_stats, "f0_max"),  # for world f0 extraction
-            log_f0=config.get("log_f0", True),
-            f0_normalize=config.get("f0_normalize", False),
-            f0_mean=read_hdf5(args.trg_stats, "lf0_mean"),  # for speaker normalization
-            f0_scale=read_hdf5(
-                args.trg_stats, "lf0_scale"
-            ),  # for speaker normalization
-        )
-        dev_dataset = AudioSCPMelDataset(
-            args.dev_scp,
-            config,
-            extract_f0=config.get("use_f0", False),
-            f0_extractor=config.get("f0_extractor", "world"),
-            f0_min=read_hdf5(args.trg_stats, "f0_min"),  # for world f0 extraction
-            f0_max=read_hdf5(args.trg_stats, "f0_max"),  # for world f0 extraction
-            log_f0=config.get("log_f0", True),
-            f0_normalize=config.get("f0_normalize", False),
-            f0_mean=read_hdf5(args.trg_stats, "lf0_mean"),  # for speaker normalization
-            f0_scale=read_hdf5(
-                args.trg_stats, "lf0_scale"
-            ),  # for speaker normalization
-        )
+        f0_min = read_hdf5(args.trg_stats, "f0_min")
+        f0_max = read_hdf5(args.trg_stats, "f0_max")
+        f0_mean = read_hdf5(args.trg_stats, "lf0_mean")
+        f0_scale = read_hdf5(args.trg_stats, "lf0_scale")
     else:
-        train_dataset = AudioSCPMelDataset(
-            args.train_scp,
-            config,
-        )
-        dev_dataset = AudioSCPMelDataset(
-            args.dev_scp,
-            config,
-        )
+        f0_min = None
+        f0_max = None
+        f0_mean = None
+        f0_scale = None
+
+    # get dataset
+    train_dataset = AudioSCPMelDataset(
+        config,
+        args.train_scp,
+        extract_f0=config.get("use_f0", False),
+        f0_extractor=config.get("f0_extractor", "world"),
+        f0_min=f0_min,  # for world f0 extraction
+        f0_max=f0_max,  # for world f0 extraction
+        log_f0=config.get("log_f0", True),
+        f0_normalize=config.get("f0_normalize", False),
+        f0_mean=f0_mean,  # for speaker normalization
+        f0_scale=f0_scale,  # for speaker normalization
+        use_spk_emb=config.get("use_spk_emb", False),
+        spk_emb_extractor=config.get("spk_emb_extractor", "wespeaker"),
+    )
+    dev_dataset = AudioSCPMelDataset(
+        config,
+        args.dev_scp,
+        extract_f0=config.get("use_f0", False),
+        f0_extractor=config.get("f0_extractor", "world"),
+        f0_min=f0_min,  # for world f0 extraction
+        f0_max=f0_max,  # for world f0 extraction
+        log_f0=config.get("log_f0", True),
+        f0_normalize=config.get("f0_normalize", False),
+        f0_mean=f0_mean,  # for speaker normalization
+        f0_scale=f0_scale,  # for speaker normalization
+        use_spk_emb=config.get("use_spk_emb", False),
+        spk_emb_extractor=config.get("spk_emb_extractor", "wespeaker"),
+    )
     logging.info(f"The number of training files = {len(train_dataset)}.")
     logging.info(f"The number of development files = {len(dev_dataset)}.")
     dataset = {
@@ -655,7 +664,9 @@ def main():
     }
 
     # get data loader
-    collater = Collater(use_f0=config.get("use_f0", False))
+    collater = Collater(
+        use_f0=config.get("use_f0", False), use_spk_emb=config.get("use_spk_emb", False)
+    )
     sampler = {"train": None, "dev": None}
     if args.distributed:
         # setup sampler for distributed training
@@ -712,6 +723,7 @@ def main():
         * upstream_featurizer.downsample_rate
         / 16000,
         config["trg_stats"],
+        use_spemb=config.get("use_spk_emb", False),
         **config["model_params"],
     ).to(device)
 

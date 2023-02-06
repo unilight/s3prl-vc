@@ -12,24 +12,19 @@ from multiprocessing import Manager
 import kaldiio
 import librosa
 import numpy as np
+import soundfile as sf
 
+import torch
 from torch.utils.data import Dataset
 
 from s3prl_vc.transform.spectrogram import logmelfilterbank
 from s3prl_vc.transform.f0 import get_yaapt_f0, get_world_f0
 from s3prl_vc.utils import find_files, get_basename
 
-##########################
-# Datasets with audio #
-##########################
 
-
-class AudioSCPMelDataset(Dataset):
-    """PyTorch compatible audio dataset based on kaldi-stype scp files."""
-
+class MelDataset(Dataset):
     def __init__(
         self,
-        wav_scp,
         config,
         extract_f0=False,
         f0_extractor="yaapt",
@@ -39,24 +34,17 @@ class AudioSCPMelDataset(Dataset):
         f0_normalize=False,
         f0_mean=None,
         f0_scale=None,
-        segments=None,
-        audio_length_threshold=None,
+        use_spk_emb=False,
+        spk_emb_extractor="wespeaker",
+        spk_emb_source="self",  # set to self during training, set to external during inference
         return_utt_id=False,
         return_sampling_rate=False,
         allow_cache=False,
+        *args,
+        **kwargs,
     ):
-        """Initialize dataset.
 
-        Args:
-            wav_scp (str): Kaldi-style wav.scp file.
-            segments (str): Kaldi-style segments file.
-            audio_length_threshold (int): Threshold to remove short audio files.
-            return_utt_id (bool): Whether to return utterance id.
-            return_sampling_rate (bool): Wheter to return sampling rate.
-            allow_cache (bool): Whether to allow cache of the loaded files.
-
-        """
-        self.config = config
+        # f0 related
         self.extract_f0 = extract_f0
         self.f0_extractor = f0_extractor
         self.f0_min = f0_min
@@ -65,37 +53,88 @@ class AudioSCPMelDataset(Dataset):
         self.f0_normalize = f0_normalize
         self.f0_mean = f0_mean
         self.f0_scale = f0_scale
+        self.spk_emb_source = spk_emb_source
 
-        # load scp as lazy dict
-        audio_loader = kaldiio.load_scp(wav_scp, segments=segments)
-        audio_keys = list(audio_loader.keys())
+        # speaker embedding related
+        self.use_spk_emb = use_spk_emb
+        self.spk_emb_source = spk_emb_source
 
-        # filter by threshold
-        if audio_length_threshold is not None:
-            audio_lengths = [audio.shape[0] for _, audio in audio_loader.values()]
-            idxs = [
-                idx
-                for idx in range(len(audio_keys))
-                if audio_lengths[idx] > audio_length_threshold
-            ]
-            if len(audio_keys) != len(idxs):
-                logging.warning(
-                    "Some files are filtered by audio length threshold "
-                    f"({len(audio_keys)} -> {len(idxs)})."
-                )
-            audio_keys = [audio_keys[idx] for idx in idxs]
-
-        self.audio_loader = audio_loader
-        self.utt_ids = audio_keys
+        self.config = config
         self.return_utt_id = return_utt_id
         self.return_sampling_rate = return_sampling_rate
         self.allow_cache = allow_cache
 
-        if allow_cache:
-            # NOTE(kan-bayashi): Manager is need to share memory in dataloader with num_workers > 0
-            self.manager = Manager()
-            self.caches = self.manager.list()
-            self.caches += [() for _ in range(len(self.utt_ids))]
+        if use_spk_emb:
+            if spk_emb_extractor == "wespeaker":
+                from s3prl_vc.utils.speaker_embedding_wespeaker import (
+                    load_asv_model,
+                    get_embedding,
+                )
+
+                self.spk_emb_model = load_asv_model()
+                self.spk_emb_func = get_embedding
+            elif spk_emb_extractor == "resemblyzer":
+                from s3prl_vc.utils.speaker_embedding_resemblyzer import (
+                    load_asv_model,
+                    get_embedding,
+                )
+
+                self.spk_emb_model = load_asv_model()
+                self.spk_emb_func = get_embedding
+                # self.spk_emb_model.to(torch.device("cpu"))
+                # if torch.cuda.is_available():
+                # self.spk_emb_model.to(torch.device("cuda"))
+            else:
+                raise NotImplementedError
+
+    def _logmelfilterbank(self, audio_for_mel):
+        return logmelfilterbank(
+            audio_for_mel,
+            sampling_rate=self.config["sampling_rate"],
+            hop_size=self.config["hop_size"],
+            fft_size=self.config["fft_size"],
+            win_length=self.config["win_length"],
+            window=self.config["window"],
+            num_mels=self.config["num_mels"],
+            fmin=self.config["fmin"],
+            fmax=self.config["fmax"],
+            # keep compatibility
+            log_base=self.config.get("log_base", 10.0),
+        )
+
+    def _extract_f0(self, audio_for_mel):
+        if self.f0_extractor == "yaapt":
+            f0 = get_yaapt_f0(
+                audio_for_mel,
+                rate=self.config["sampling_rate"],
+                frame_length=self.config["fft_size"],
+                frame_shift=self.config["hop_size"],
+                interp=self.config["f0_interp"],
+            )
+        elif self.f0_extractor == "world":
+            f0 = get_world_f0(
+                audio_for_mel,
+                fs=self.config["sampling_rate"],
+                f0min=self.f0_min,
+                f0max=self.f0_max,
+                frame_length=self.config["fft_size"],
+                frame_shift=self.config["hop_size"],
+                interp=self.config["f0_interp"],
+            )
+
+        else:
+            raise NotImplementedError
+
+        if self.log_f0:
+            lf0 = f0.copy()
+            nonzero_indices = np.nonzero(f0)
+            lf0[nonzero_indices] = np.log(f0[nonzero_indices])
+            f0 = lf0
+        if self.f0_normalize:
+            # f0 = (f0 - self.f0_mean) / self.f0_scale
+            f0 = f0 - self.f0_mean
+
+        return f0
 
     def __getitem__(self, idx):
         """Get specified idx items.
@@ -129,51 +168,7 @@ class AudioSCPMelDataset(Dataset):
             audio_for_mel = audio
 
         # extract logmelspec
-        mel = logmelfilterbank(
-            audio_for_mel,
-            sampling_rate=self.config["sampling_rate"],
-            hop_size=self.config["hop_size"],
-            fft_size=self.config["fft_size"],
-            win_length=self.config["win_length"],
-            window=self.config["window"],
-            num_mels=self.config["num_mels"],
-            fmin=self.config["fmin"],
-            fmax=self.config["fmax"],
-            # keep compatibility
-            log_base=self.config.get("log_base", 10.0),
-        )
-
-        # extract f0
-        if self.extract_f0:
-            if self.f0_extractor == "yaapt":
-                f0 = get_yaapt_f0(
-                    audio_for_mel,
-                    rate=self.config["sampling_rate"],
-                    frame_length=self.config["fft_size"],
-                    frame_shift=self.config["hop_size"],
-                    interp=self.config["f0_interp"],
-                )
-            elif self.f0_extractor == "world":
-                f0 = get_world_f0(
-                    audio_for_mel,
-                    fs=self.config["sampling_rate"],
-                    f0min=self.f0_min,
-                    f0max=self.f0_max,
-                    frame_length=self.config["fft_size"],
-                    frame_shift=self.config["hop_size"],
-                    interp=self.config["f0_interp"],
-                )
-
-            else:
-                raise NotImplementedError
-            if self.log_f0:
-                lf0 = f0.copy()
-                nonzero_indices = np.nonzero(f0)
-                lf0[nonzero_indices] = np.log(f0[nonzero_indices])
-                f0 = lf0
-            if self.f0_normalize:
-                # f0 = (f0 - self.f0_mean) / self.f0_scale
-                f0 = f0 - self.f0_mean
+        mel = self._logmelfilterbank(audio_for_mel)
 
         # always resample to 16kHz
         audio = librosa.resample(audio, orig_sr=fs, target_sr=16000)
@@ -181,17 +176,21 @@ class AudioSCPMelDataset(Dataset):
         if self.return_sampling_rate:
             audio = (audio, fs)
 
-        items = {
-            "utt_id": "",
-            "audio": audio,
-            "mel": mel,
-            "f0": None,
-        }
+        items = {"utt_id": "", "audio": audio, "mel": mel, "f0": None, "spemb": None}
 
         if self.return_utt_id:
             items["utt_id"] = utt_id
         if self.extract_f0:
-            items["f0"] = f0
+            items["f0"] = self._extract_f0(audio_for_mel)
+        if self.use_spk_emb:
+            spembs = []
+            for spk_emb_source_file in self.spk_emb_source_files[utt_id]:
+                spembs.append(
+                    np.squeeze(
+                        self.spk_emb_func(spk_emb_source_file, self.spk_emb_model)
+                    )
+                )
+            items["spemb"] = np.mean(np.stack(spembs, axis=0), axis=0)
 
         if self.allow_cache:
             self.caches[idx] = items
@@ -206,6 +205,173 @@ class AudioSCPMelDataset(Dataset):
 
         """
         return len(self.utt_ids)
+
+
+#######################
+# Datasets with audio #
+#######################
+
+
+class AudioSCPMelDataset(MelDataset):
+    """PyTorch compatible audio dataset based on kaldi-stype scp files."""
+
+    def __init__(
+        self,
+        config,
+        wav_scp,
+        segments=None,
+        extract_f0=False,
+        f0_extractor="yaapt",
+        f0_min=None,
+        f0_max=None,
+        log_f0=True,
+        f0_normalize=False,
+        f0_mean=None,
+        f0_scale=None,
+        use_spk_emb=False,
+        spk_emb_extractor="wespeaker",
+        spk_emb_source="self",
+        return_utt_id=False,
+        return_sampling_rate=False,
+        allow_cache=False,
+        *args,
+        **kwargs,
+    ):
+        """Initialize dataset.
+
+        Args:
+            wav_scp (str): Kaldi-style wav.scp file.
+            segments (str): Kaldi-style segments file.
+            return_utt_id (bool): Whether to return utterance id.
+            return_sampling_rate (bool): Wheter to return sampling rate.
+            allow_cache (bool): Whether to allow cache of the loaded files.
+
+        """
+        super().__init__(
+            config,
+            extract_f0=extract_f0,
+            f0_extractor=f0_extractor,
+            f0_min=f0_min,
+            f0_max=f0_max,
+            log_f0=log_f0,
+            f0_normalize=f0_normalize,
+            f0_mean=f0_mean,
+            f0_scale=f0_scale,
+            use_spk_emb=use_spk_emb,
+            spk_emb_extractor=spk_emb_extractor,
+            spk_emb_source=spk_emb_source,
+            return_utt_id=return_utt_id,
+            return_sampling_rate=return_sampling_rate,
+            allow_cache=allow_cache,
+        )
+
+        audio_loader = dict()
+        audio_keys = list()
+        spk_emb_source_files = dict()
+
+        with open(wav_scp) as f:
+            for line in f.read().splitlines():
+                utt_id, contents = line.split(" ", 1)
+                contents = contents.split(" ")
+                audio_file = contents[0]
+                audio_keys.append(utt_id)
+                audio_loader[utt_id] = (sf.read(audio_file)[1], sf.read(audio_file)[0])
+                if self.spk_emb_source == "self":
+                    spk_emb_source_files[utt_id] = [audio_file]
+                elif self.spk_emb_source == "external":
+                    assert (
+                        len(contents[1:]) > 0
+                    ), "during inference, please append speaker embedding source files at the end of each line."
+                    spk_emb_source_files[utt_id] = contents[1:]
+                else:
+                    raise NotImplementedError(
+                        f"Unknown spk_emb_source: {self.spk_emb_source}"
+                    )
+
+        self.audio_loader = audio_loader
+        self.utt_ids = audio_keys
+        self.spk_emb_source_files = spk_emb_source_files
+
+        if allow_cache:
+            # NOTE(kan-bayashi): Manager is need to share memory in dataloader with num_workers > 0
+            self.manager = Manager()
+            self.caches = self.manager.list()
+            self.caches += [() for _ in range(len(self.utt_ids))]
+
+
+class AudioMelDataset(MelDataset):
+    """PyTorch compatible audio dataset based on a given directory of wav files."""
+
+    def __init__(
+        self,
+        config,
+        wavdir,
+        query="*.wav",
+        extract_f0=False,
+        f0_extractor="yaapt",
+        f0_min=None,
+        f0_max=None,
+        log_f0=True,
+        f0_normalize=False,
+        f0_mean=None,
+        f0_scale=None,
+        use_spk_emb=False,
+        spk_emb_extractor="wespeaker",
+        spk_emb_source="self",
+        return_utt_id=False,
+        return_sampling_rate=False,
+        allow_cache=False,
+        *args,
+        **kwargs,
+    ):
+        """Initialize dataset.
+
+        Args:
+            wavdir (str): Kaldi-style wav.scp file.
+            return_utt_id (bool): Whether to return utterance id.
+            return_sampling_rate (bool): Wheter to return sampling rate.
+            allow_cache (bool): Whether to allow cache of the loaded files.
+
+        """
+        super().__init__(
+            config,
+            extract_f0=extract_f0,
+            f0_extractor=f0_extractor,
+            f0_min=f0_min,
+            f0_max=f0_max,
+            log_f0=log_f0,
+            f0_normalize=f0_normalize,
+            f0_mean=f0_mean,
+            f0_scale=f0_scale,
+            use_spk_emb=use_spk_emb,
+            spk_emb_extractor=spk_emb_extractor,
+            spk_emb_source=spk_emb_source,
+            return_utt_id=return_utt_id,
+            return_sampling_rate=return_sampling_rate,
+            allow_cache=allow_cache,
+        )
+
+        # find all of audio files
+        audio_files = sorted(find_files(wavdir, query))
+        audio_loader = {
+            get_basename(audio_file): (sf.read(audio_file)[1], sf.read(audio_file)[0])
+            for audio_file in audio_files
+        }
+        audio_keys = sorted(list(audio_loader.keys()))
+
+        self.audio_loader = audio_loader
+        self.utt_ids = audio_keys
+
+        if allow_cache:
+            # NOTE(kan-bayashi): Manager is need to share memory in dataloader with num_workers > 0
+            self.manager = Manager()
+            self.caches = self.manager.list()
+            self.caches += [() for _ in range(len(self.utt_ids))]
+
+        # since wespeaker requires to extract from wav paths, save them in audio_files: {utt_id: path}
+        self.audio_files = {
+            get_basename(audio_file): audio_file for audio_file in audio_files
+        }
 
 
 ##########################

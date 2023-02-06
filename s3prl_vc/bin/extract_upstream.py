@@ -128,14 +128,14 @@ def main():
     # get dataset
     if args.scp is not None:
         dataset = AudioSCPMelDataset(
-            args.scp,
             config,
+            args.scp,
             return_utt_id=True,
         )
     else:
         dataset = AudioMelDataset(
-            args.wavdir,
             config,
+            args.wavdir,
             return_utt_id=True,
         )
 

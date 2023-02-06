@@ -22,7 +22,7 @@ from s3prl.nn import Featurizer
 
 import s3prl_vc.models
 from s3prl_vc.upstream.interface import get_upstream
-from s3prl_vc.datasets.datasets import AudioSCPMelDataset
+from s3prl_vc.datasets.datasets import AudioSCPMelDataset, AudioMelDataset
 from s3prl_vc.utils import read_hdf5, write_hdf5
 from s3prl_vc.utils.data import pad_list
 from s3prl_vc.utils.plot import plot_generated_and_ref_2d, plot_1d
@@ -140,37 +140,42 @@ def main():
     ):
         raise ValueError("Please specify either --wavdir or --scp.")
 
+    # set f0 stats
+    if config.get("use_f0", False):
+        f0_min = read_hdf5(args.trg_stats, "f0_min")
+        f0_max = read_hdf5(args.trg_stats, "f0_max")
+        f0_mean = read_hdf5(args.trg_stats, "lf0_mean")
+        f0_scale = read_hdf5(args.trg_stats, "lf0_scale")
+    else:
+        f0_min = None
+        f0_max = None
+        f0_mean = None
+        f0_scale = None
+
     # get dataset
     if args.scp is not None:
-        if config.get("use_f0", False):
-            dataset = AudioSCPMelDataset(
-                args.scp,
-                config,
-                extract_f0=config.get("use_f0", False),
-                f0_extractor=config.get("f0_extractor", "world"),
-                f0_min=read_hdf5(args.trg_stats, "f0_min"),  # for world f0 extraction
-                f0_max=read_hdf5(args.trg_stats, "f0_max"),  # for world f0 extraction
-                log_f0=config.get("log_f0", True),
-                f0_normalize=config.get("f0_normalize", False),
-                f0_mean=read_hdf5(
-                    args.trg_stats, "lf0_mean"
-                ),  # for speaker normalization
-                f0_scale=read_hdf5(
-                    args.trg_stats, "lf0_scale"
-                ),  # for speaker normalization
-                return_utt_id=True,
-            )
-        else:
-            dataset = AudioSCPMelDataset(
-                args.scp,
-                config,
-                return_utt_id=True,
-            )
-    else:
-        raise NotImplementedError
-        dataset = AudioMelDataset(
-            args.wavdir,
+        dataset = AudioSCPMelDataset(
             config,
+            args.scp,
+            extract_f0=config.get("use_f0", False),
+            f0_extractor=config.get("f0_extractor", "world"),
+            f0_min=f0_min,  # for world f0 extraction
+            f0_max=f0_max,  # for world f0 extraction
+            log_f0=config.get("log_f0", True),
+            f0_normalize=config.get("f0_normalize", False),
+            f0_mean=f0_mean, # for speaker normalization
+            f0_scale=f0_scale, # for speaker normalization
+            use_spk_emb=config.get("use_spk_emb", False),
+            spk_emb_extractor=config.get("spk_emb_extractor", "wespeaker"),
+            spk_emb_source="external",
+            return_utt_id=True,
+        )
+    else:
+        dataset = AudioMelDataset(
+            config,
+            args.wavdir,
+            use_spk_emb=config.get("use_spk_emb", False),
+            spk_emb_extractor=config.get("spk_emb_extractor", "wespeaker"),
             return_utt_id=True,
         )
 
@@ -196,6 +201,7 @@ def main():
         * upstream_featurizer.downsample_rate
         / 16000,
         config["trg_stats"],
+        use_spemb=config.get("use_spk_emb", False),
         **config["model_params"],
     ).to(device)
     model.load_state_dict(torch.load(args.checkpoint, map_location="cpu")["model"])
@@ -230,16 +236,19 @@ def main():
             x = batch["audio"]
             mel = batch["mel"]
             f0s = batch["f0"]
+            spemb = batch["spemb"]
 
             xs = torch.from_numpy(x).unsqueeze(0).float().to(device)
             if f0s is not None:
                 f0s = torch.from_numpy(f0s).unsqueeze(0).float().to(device)
+            if spemb is not None:
+                spemb = torch.from_numpy(spemb).unsqueeze(0).float().to(device)
             ilens = torch.LongTensor([x.shape[0]]).to(device)
 
             start_time = time.time()
             all_hs, all_hlens = upstream_model(xs, ilens)
             hs, hlens = upstream_featurizer(all_hs, all_hlens)
-            outs, _ = model(hs, hlens, spk_embs=None, f0s=f0s)
+            outs, _ = model(hs, hlens, spk_embs=spemb, f0s=f0s)
             out = outs[0]
             logging.info(
                 "inference speed = %.1f frames / sec."
