@@ -26,8 +26,6 @@ resume=""  # checkpoint path to resume training
            # (e.g. <path>/<to>/checkpoint-10000steps.pkl)
            
 # decoding related setting
-outdir=                     # In case not evaluation not executed together with decoding & synthesis stage
-model=                      # VC Model checkpoint for decoding. If not specified, automatically set to the latest checkpoint 
 checkpoint=""               # checkpoint path to be used for decoding
                             # if not provided, the latest one will be used
                             # (e.g. <path>/<to>/checkpoint-400000steps.pkl)
@@ -36,6 +34,12 @@ checkpoint=""               # checkpoint path to be used for decoding
 . utils/parse_options.sh || exit 1;
 
 set -euo pipefail
+
+if [ ${stage} -le -1 ] && [ ${stop_stage} -ge -1 ]; then
+    echo "stage -1: Pretrained Model Download"
+    local/vocoder_download.sh ${db_root}
+fi
+
 
 if [ ${stage} -le 0 ] && [ ${stop_stage} -ge 0 ]; then
     echo "stage 0: Data preparation"

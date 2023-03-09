@@ -19,7 +19,7 @@ from torch.utils.data import Dataset
 
 from s3prl_vc.transform.spectrogram import logmelfilterbank
 from s3prl_vc.transform.f0 import get_yaapt_f0, get_world_f0
-from s3prl_vc.utils import find_files, get_basename
+from s3prl_vc.utils import find_files, get_basename, read_hdf5
 
 
 class MelDataset(Dataset):
@@ -39,6 +39,7 @@ class MelDataset(Dataset):
         spk_emb_source="self",  # set to self during training, set to external during inference
         return_utt_id=False,
         return_sampling_rate=False,
+        return_wavpath=False,
         allow_cache=False,
         *args,
         **kwargs,
@@ -62,15 +63,16 @@ class MelDataset(Dataset):
         self.config = config
         self.return_utt_id = return_utt_id
         self.return_sampling_rate = return_sampling_rate
+        self.return_wavpath = return_wavpath
         self.allow_cache = allow_cache
 
-        if use_spk_emb:
+        # only load speaker embedding model when testing (i.e. spk_emb_source != self)
+        if use_spk_emb and spk_emb_source != "self":
             if spk_emb_extractor == "wespeaker":
                 from s3prl_vc.utils.speaker_embedding_wespeaker import (
                     load_asv_model,
                     get_embedding,
                 )
-
                 self.spk_emb_model = load_asv_model()
                 self.spk_emb_func = get_embedding
             elif spk_emb_extractor == "resemblyzer":
@@ -78,12 +80,8 @@ class MelDataset(Dataset):
                     load_asv_model,
                     get_embedding,
                 )
-
                 self.spk_emb_model = load_asv_model()
                 self.spk_emb_func = get_embedding
-                # self.spk_emb_model.to(torch.device("cpu"))
-                # if torch.cuda.is_available():
-                # self.spk_emb_model.to(torch.device("cuda"))
             else:
                 raise NotImplementedError
 
@@ -151,11 +149,11 @@ class MelDataset(Dataset):
             return self.caches[idx]
 
         utt_id = self.utt_ids[idx]
-        fs, audio = self.audio_loader[utt_id]
+        audio, fs = sf.read(self.audio_paths[utt_id])
 
         # normalize audio signal to be [-1, 1]
         audio = audio.astype(np.float32)
-        audio /= 1 << (16 - 1)  # assume that wav is PCM 16 bit
+        # audio /= 1 << (16 - 1)  # assume that wav is PCM 16 bit
 
         # resample the audio for logmelspec extraction if needed
         if fs != self.config["sampling_rate"]:
@@ -176,21 +174,26 @@ class MelDataset(Dataset):
         if self.return_sampling_rate:
             audio = (audio, fs)
 
-        items = {"utt_id": "", "audio": audio, "mel": mel, "f0": None, "spemb": None}
+        items = {"utt_id": "", "audio": audio, "mel": mel, "f0": None, "spemb": None, "wavpath": None}
 
         if self.return_utt_id:
             items["utt_id"] = utt_id
         if self.extract_f0:
             items["f0"] = self._extract_f0(audio_for_mel)
         if self.use_spk_emb:
-            spembs = []
-            for spk_emb_source_file in self.spk_emb_source_files[utt_id]:
-                spembs.append(
-                    np.squeeze(
-                        self.spk_emb_func(spk_emb_source_file, self.spk_emb_model)
+            if self.spk_emb_source == "self":
+                items["spemb"] = read_hdf5(self.spk_emb_paths[utt_id], "spemb")
+            else:
+                spembs = []
+                for spk_emb_source_file in self.spk_emb_source_files[utt_id]:
+                    spembs.append(
+                        np.squeeze(
+                            self.spk_emb_func(spk_emb_source_file, self.spk_emb_model)
+                        )
                     )
-                )
-            items["spemb"] = np.mean(np.stack(spembs, axis=0), axis=0)
+                items["spemb"] = np.mean(np.stack(spembs, axis=0), axis=0)
+        if self.return_wavpath:
+            items["wavpath"] = self.audio_paths[utt_id]
 
         if self.allow_cache:
             self.caches[idx] = items
@@ -219,21 +222,8 @@ class AudioSCPMelDataset(MelDataset):
         self,
         config,
         wav_scp,
+        spemb_scp=None,
         segments=None,
-        extract_f0=False,
-        f0_extractor="yaapt",
-        f0_min=None,
-        f0_max=None,
-        log_f0=True,
-        f0_normalize=False,
-        f0_mean=None,
-        f0_scale=None,
-        use_spk_emb=False,
-        spk_emb_extractor="wespeaker",
-        spk_emb_source="self",
-        return_utt_id=False,
-        return_sampling_rate=False,
-        allow_cache=False,
         *args,
         **kwargs,
     ):
@@ -241,33 +231,20 @@ class AudioSCPMelDataset(MelDataset):
 
         Args:
             wav_scp (str): Kaldi-style wav.scp file.
+            spemb_scp (str): Kaldi-style scp file for speaker embeddings
             segments (str): Kaldi-style segments file.
             return_utt_id (bool): Whether to return utterance id.
             return_sampling_rate (bool): Wheter to return sampling rate.
             allow_cache (bool): Whether to allow cache of the loaded files.
 
         """
-        super().__init__(
-            config,
-            extract_f0=extract_f0,
-            f0_extractor=f0_extractor,
-            f0_min=f0_min,
-            f0_max=f0_max,
-            log_f0=log_f0,
-            f0_normalize=f0_normalize,
-            f0_mean=f0_mean,
-            f0_scale=f0_scale,
-            use_spk_emb=use_spk_emb,
-            spk_emb_extractor=spk_emb_extractor,
-            spk_emb_source=spk_emb_source,
-            return_utt_id=return_utt_id,
-            return_sampling_rate=return_sampling_rate,
-            allow_cache=allow_cache,
-        )
+        super().__init__(config, **kwargs)
 
-        audio_loader = dict()
+        audio_paths = dict()
         audio_keys = list()
-        spk_emb_source_files = dict()
+        spk_emb_paths = dict()
+
+        assert self.spk_emb_source in ["self", "external"], f"Unknown spk_emb_source: {self.spk_emb_source}"
 
         with open(wav_scp) as f:
             for line in f.read().splitlines():
@@ -275,24 +252,26 @@ class AudioSCPMelDataset(MelDataset):
                 contents = contents.split(" ")
                 audio_file = contents[0]
                 audio_keys.append(utt_id)
-                audio_loader[utt_id] = (sf.read(audio_file)[1], sf.read(audio_file)[0])
-                if self.spk_emb_source == "self":
-                    spk_emb_source_files[utt_id] = [audio_file]
-                elif self.spk_emb_source == "external":
+                audio_paths[utt_id] = audio_file
+                if self.spk_emb_source == "external":
                     assert (
                         len(contents[1:]) > 0
                     ), "during inference, please append speaker embedding source files at the end of each line."
-                    spk_emb_source_files[utt_id] = contents[1:]
-                else:
-                    raise NotImplementedError(
-                        f"Unknown spk_emb_source: {self.spk_emb_source}"
-                    )
+                    spk_emb_paths[utt_id] = contents[1:]
 
-        self.audio_loader = audio_loader
+        # during training, use pre-calculated speaker embeddings to accelerate
+        if self.use_spk_emb and self.spk_emb_source == "self":
+            assert spemb_scp is not None, "spemb_scp must be given during training"
+            with open(spemb_scp) as f:
+                for line in f.read().splitlines():
+                    utt_id, h5path = line.split(" ")
+                    spk_emb_paths[utt_id] = h5path
+
+        self.audio_paths = audio_paths
         self.utt_ids = audio_keys
-        self.spk_emb_source_files = spk_emb_source_files
+        self.spk_emb_paths = spk_emb_paths
 
-        if allow_cache:
+        if self.allow_cache:
             # NOTE(kan-bayashi): Manager is need to share memory in dataloader with num_workers > 0
             self.manager = Manager()
             self.caches = self.manager.list()
@@ -307,20 +286,6 @@ class AudioMelDataset(MelDataset):
         config,
         wavdir,
         query="*.wav",
-        extract_f0=False,
-        f0_extractor="yaapt",
-        f0_min=None,
-        f0_max=None,
-        log_f0=True,
-        f0_normalize=False,
-        f0_mean=None,
-        f0_scale=None,
-        use_spk_emb=False,
-        spk_emb_extractor="wespeaker",
-        spk_emb_source="self",
-        return_utt_id=False,
-        return_sampling_rate=False,
-        allow_cache=False,
         *args,
         **kwargs,
     ):
@@ -333,23 +298,7 @@ class AudioMelDataset(MelDataset):
             allow_cache (bool): Whether to allow cache of the loaded files.
 
         """
-        super().__init__(
-            config,
-            extract_f0=extract_f0,
-            f0_extractor=f0_extractor,
-            f0_min=f0_min,
-            f0_max=f0_max,
-            log_f0=log_f0,
-            f0_normalize=f0_normalize,
-            f0_mean=f0_mean,
-            f0_scale=f0_scale,
-            use_spk_emb=use_spk_emb,
-            spk_emb_extractor=spk_emb_extractor,
-            spk_emb_source=spk_emb_source,
-            return_utt_id=return_utt_id,
-            return_sampling_rate=return_sampling_rate,
-            allow_cache=allow_cache,
-        )
+        super().__init__(config, **kwargs)
 
         # find all of audio files
         audio_files = sorted(find_files(wavdir, query))
@@ -362,7 +311,7 @@ class AudioMelDataset(MelDataset):
         self.audio_loader = audio_loader
         self.utt_ids = audio_keys
 
-        if allow_cache:
+        if self.allow_cache:
             # NOTE(kan-bayashi): Manager is need to share memory in dataloader with num_workers > 0
             self.manager = Manager()
             self.caches = self.manager.list()

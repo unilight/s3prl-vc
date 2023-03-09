@@ -292,6 +292,8 @@ class Trainer(object):
         ):
             if eval_steps_per_epoch == 1:
                 self._genearete_and_save_intermediate_result(batch)
+            else:
+                continue
 
         logging.info(
             f"(Steps: {self.steps}) Finished evaluation "
@@ -482,13 +484,25 @@ def main():
         "--train-scp",
         required=True,
         type=str,
-        help=("directory including training wav scp. "),
+        help=("training wav scp. "),
+    )
+    parser.add_argument(
+        "--train-spemb-scp",
+        default=None,
+        type=str,
+        help=("training spemb scp, if needed. "),
     )
     parser.add_argument(
         "--dev-scp",
         required=True,
         type=str,
-        help=("directory including source development data. "),
+        help=("development wav scp. "),
+    )
+    parser.add_argument(
+        "--dev-spemb-scp",
+        default=None,
+        type=str,
+        help=("development spemb scp, if needed. "),
     )
     parser.add_argument(
         "--trg-stats",
@@ -641,6 +655,9 @@ def main():
         f0_scale=f0_scale,  # for speaker normalization
         use_spk_emb=config.get("use_spk_emb", False),
         spk_emb_extractor=config.get("spk_emb_extractor", "wespeaker"),
+        spk_emb_source="self",
+        spemb_scp=args.train_spemb_scp,
+        allow_cache=config.get("allow_cache", False),
     )
     dev_dataset = AudioSCPMelDataset(
         config,
@@ -655,6 +672,9 @@ def main():
         f0_scale=f0_scale,  # for speaker normalization
         use_spk_emb=config.get("use_spk_emb", False),
         spk_emb_extractor=config.get("spk_emb_extractor", "wespeaker"),
+        spk_emb_source="self",
+        spemb_scp=args.dev_spemb_scp,
+        allow_cache=config.get("allow_cache", False),
     )
     logging.info(f"The number of training files = {len(train_dataset)}.")
     logging.info(f"The number of development files = {len(dev_dataset)}.")

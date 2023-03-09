@@ -176,6 +176,7 @@ def main():
             args.wavdir,
             use_spk_emb=config.get("use_spk_emb", False),
             spk_emb_extractor=config.get("spk_emb_extractor", "wespeaker"),
+            spk_emb_source="self",
             return_utt_id=True,
         )
 

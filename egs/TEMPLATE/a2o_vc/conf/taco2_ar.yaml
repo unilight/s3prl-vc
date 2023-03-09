@@ -41,9 +41,9 @@ main_loss_type: "L1Loss"
 #                   INFERENCE SETTING                     #
 ###########################################################
 vocoder:
-    checkpoint: ./downloads/pwg_task1/checkpoint-400000steps.pkl
-    config: ./downloads/pwg_task1/config.yml
-    stats: ./downloads/pwg_task1/stats.h5
+    checkpoint: ./downloads/hifigan_vctk+vcc2020/checkpoint-2500000steps.pkl
+    config: ./downloads/hifigan_vctk+vcc2020/config.yml
+    stats: ./downloads/hifigan_vctk+vcc2020/stats.h5
 
 ###########################################################
 #                  DATA LOADER SETTING                    #
