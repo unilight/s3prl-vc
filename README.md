@@ -1,5 +1,10 @@
 # S3PRL-VC: A Voice Conversion Toolkit based on S3PRL
 
+Paper (ICASSP2023) [![arXiv](https://img.shields.io/badge/arXiv-2110.06280-b31b1b.svg)](https://arxiv.org/abs/2110.06280)  
+Paper (IEEE Journal of Selected Topics in Signal Processing)  [![arXiv](https://img.shields.io/badge/arXiv-2207.04356-b31b1b.svg)](https://arxiv.org/abs/2207.04356)  
+Original codebase on S3PRL [![GitHub](https://img.shields.io/badge/github-%23121011.svg?style=for-the-badge&logo=github&logoColor=white)](https://github.com/s3prl/s3prl/tree/master/s3prl/downstream/a2o-vc-vcc2020)  
+**NEW!** HuggingFace Spaces Demo [![Open In Spaces](https://camo.githubusercontent.com/00380c35e60d6b04be65d3d94a58332be5cc93779f630bcdfc18ab9a3a7d3388/68747470733a2f2f696d672e736869656c64732e696f2f62616467652f25463025394625413425393725323048756767696e67253230466163652d5370616365732d626c7565)](https://huggingface.co/spaces/unilight/s3prl-vc-vcc2020)
+
 ## Introduction and motivation
 
 [S3PRL](https://github.com/s3prl/s3prl) stands for "Self-Supervised Speech/Sound Pre-training and Representation Learning Toolkit". It is a toolkit for benchmarking self-supervised speech representations (S3Rs) models using a collection of so-called "downstream" tasks. S3PRL-VC was originally built under S3PRL, which implements voice conversion (VC) as one of the downstream tasks. However, as S3PRL grows bigger and bigger, it is getting harder to integrate the various VC recipes into the main S3PRL repository. Therefore, this repository aims to isolate the VC downstream task from S3PRL to become an independently-maintained toolkit (hopefully).
