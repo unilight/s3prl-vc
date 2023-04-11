@@ -253,7 +253,7 @@ class AudioSCPMelDataset(MelDataset):
                 audio_file = contents[0]
                 audio_keys.append(utt_id)
                 audio_paths[utt_id] = audio_file
-                if self.spk_emb_source == "external":
+                if self.use_spk_emb and self.spk_emb_source == "external":
                     assert (
                         len(contents[1:]) > 0
                     ), "during inference, please append speaker embedding source files at the end of each line."
