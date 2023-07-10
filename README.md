@@ -72,3 +72,5 @@ This repo is greatly inspired by the following repos. Or I should say, many code
 - [ESPNet](https://github.com/espnet/espnet)
 - [S3PRL](https://github.com/s3prl/s3prl)
 - [ParallelWaveGAN](https://github.com/kan-bayashi/ParallelWaveGAN/)
+- [NNSVS](https://github.com/nnsvs/nnsvs/)
+- [DiffSinger](https://github.com/MoonInTheRiver/DiffSinger)
