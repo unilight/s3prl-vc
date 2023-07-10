@@ -60,10 +60,10 @@ scheduler_params:
 ###########################################################
 #                    INTERVAL SETTING                     #
 ###########################################################
-#train_max_steps: 100000                 # Number of training steps.
-#save_interval_steps: 5000              # Interval steps to save checkpoint.
-#eval_interval_steps: 1000              # Interval steps to evaluate the network.
-#log_interval_steps: 100                # Interval steps to record the training log.
+train_max_steps: 100000                 # Number of training steps.
+save_interval_steps: 5000              # Interval steps to save checkpoint.
+eval_interval_steps: 1000              # Interval steps to evaluate the network.
+log_interval_steps: 100                # Interval steps to record the training log.
 
 ###########################################################
 #                     OTHER SETTING                       #
