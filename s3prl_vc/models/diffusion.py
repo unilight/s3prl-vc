@@ -25,11 +25,11 @@ from s3prl_vc.models.diffsinger import GaussianDiffusion, DiffNet
 class Diffusion(torch.nn.Module):
     def __init__(
         self,
-        in_dim: int,        # input dimension of conditioning features
-        out_dim: int, #
+        in_dim: int,  # input dimension of conditioning features
+        out_dim: int,  #
         denoiser_residual_channels: int,
         use_spemb=False,
-        resample_ratio=1
+        resample_ratio=1,
     ):
         super().__init__()
         self.in_dim = in_dim
@@ -44,15 +44,15 @@ class Diffusion(torch.nn.Module):
             denoise_fn=DiffNet(
                 encoder_hidden_dim=in_dim,
                 residual_channels=denoiser_residual_channels,
-                use_spk_emb=use_spemb
+                use_spk_emb=use_spemb,
             ),
             # TODO: an encoder can also be specified here
-            #encoder=Conv1dResnet(
+            # encoder=Conv1dResnet(
             #    in_dim=in_dim,
             #    hidden_dim=256,
             #    num_layers=2,
             #    out_dim=256
-            #),
+            # ),
         )
         """Initialize Diffusion Module.
 
@@ -63,8 +63,6 @@ class Diffusion(torch.nn.Module):
             use_spemb (bool): Whether or not to use speaker embeddings.
             resample_ratio (float): Ratio to align the input and output features.
         """
-
-
 
     def forward(
         self,
@@ -96,9 +94,9 @@ class Diffusion(torch.nn.Module):
 
         # cut if necessary
         if x.size(1) > y_mel.size(1):
-            x = x[:, :y_mel.size(1), :]
+            x = x[:, : y_mel.size(1), :]
         elif x.size(1) < y_mel.size(1):
-            y_mel = y_mel[:, :x.size(1), :]
+            y_mel = y_mel[:, : x.size(1), :]
 
         if spk is not None:
             spk = spk.squeeze(-1)
@@ -106,7 +104,6 @@ class Diffusion(torch.nn.Module):
         mel_inp = x
         mel_ = self.mel_model(mel_inp, lengths, y_mel, spk)
         return (mel_[0], mel_[1], lengths)
-
 
     def inference(self, x, spk=None):
         """Calculate during inference.

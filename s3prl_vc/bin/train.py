@@ -7,7 +7,8 @@
 """Train VC model."""
 
 import warnings
-warnings.simplefilter(action='ignore', category=FutureWarning)
+
+warnings.simplefilter(action="ignore", category=FutureWarning)
 
 import argparse
 import logging
@@ -218,13 +219,17 @@ class Trainer(object):
 
         if self.config["model_type"] == "Taco2_AR":
             # model forward
-            outs, outs_lens = self.model(hs, hlens, targets=ys, spk_embs=spembs, f0s=f0s)
+            outs, outs_lens = self.model(
+                hs, hlens, targets=ys, spk_embs=spembs, f0s=f0s
+            )
 
             # normalize target outputs
             outs = (outs - self.config["trg_stats"]["mean"]) / self.config["trg_stats"][
                 "scale"
             ]
-            ys = (ys - self.config["trg_stats"]["mean"]) / self.config["trg_stats"]["scale"]
+            ys = (ys - self.config["trg_stats"]["mean"]) / self.config["trg_stats"][
+                "scale"
+            ]
 
             # main loss
             gen_loss = self.criterion["main"](outs, outs_lens, ys, olens, self.device)
@@ -234,18 +239,19 @@ class Trainer(object):
 
         elif self.config["model_type"] == "Diffusion":
             # normalize
-            ys = (ys - self.config["trg_stats"]["mean"]) / self.config["trg_stats"]["scale"]
+            ys = (ys - self.config["trg_stats"]["mean"]) / self.config["trg_stats"][
+                "scale"
+            ]
 
             # model forward
             noise_mel_, noise_mel, lengths = self.model(
-                x=hs,
-                lengths=hlens,
-                y_mel=ys,
-                spk=spembs
+                x=hs, lengths=hlens, y_mel=ys, spk=spembs
             )
 
             # noise mse loss
-            noise_loss = self.criterion["main"](noise_mel_, lengths, noise_mel, lengths, self.device)
+            noise_loss = self.criterion["main"](
+                noise_mel_, lengths, noise_mel, lengths, self.device
+            )
             gen_loss += noise_loss
             self.total_train_loss["train/diffusion_loss"] += noise_loss.item()
 
@@ -316,7 +322,7 @@ class Trainer(object):
         ):
             continue
             if self.config["model_type"] == "Taco2_AR":
-            # normalize
+                # normalize
                 if eval_steps_per_epoch == 1:
                     self._genearete_and_save_intermediate_result(batch)
                 else:
@@ -787,7 +793,6 @@ def main():
             / 16000,
             **config["model_params"],
         ).to(device)
-
 
     # load vocoder
     if config.get("vocoder", False):

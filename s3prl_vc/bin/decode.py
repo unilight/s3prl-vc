@@ -163,8 +163,8 @@ def main():
             f0_max=f0_max,  # for world f0 extraction
             log_f0=config.get("log_f0", True),
             f0_normalize=config.get("f0_normalize", False),
-            f0_mean=f0_mean, # for speaker normalization
-            f0_scale=f0_scale, # for speaker normalization
+            f0_mean=f0_mean,  # for speaker normalization
+            f0_scale=f0_scale,  # for speaker normalization
             use_spk_emb=config.get("use_spk_emb", False),
             spk_emb_extractor=config.get("spk_emb_extractor", "wespeaker"),
             spk_emb_source="external",
@@ -266,10 +266,7 @@ def main():
                 out = outs[0]
 
             elif config["model_type"] == "Diffusion":
-                out = model.inference(
-                    hs,
-                    spk=spemb
-                )
+                out = model.inference(hs, spk=spemb)
                 # inverse normalization
                 out = config["trg_stats"]["mean"] + (out * config["trg_stats"]["scale"])
                 out = out.squeeze(0)
