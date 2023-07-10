@@ -160,7 +160,7 @@ class Trainer(object):
             )
         else:
             self.model.load_state_dict(state_dict["model"])
-            self.upstream_featurizer.load_state_dict(state_dict["upstream_featurizer"])
+            self.upstream_featurizer.load_state_dict(state_dict["featurizer"])
         if not load_only_params:
             self.steps = state_dict["steps"]
             self.epochs = state_dict["epochs"]
@@ -213,20 +213,44 @@ class Trainer(object):
             all_hs, all_hlens = self.upstream_model(xs, ilens)
         hs, hlens = self.upstream_featurizer(all_hs, all_hlens)
 
-        # model forward
-        outs, outs_lens = self.model(hs, hlens, targets=ys, spk_embs=spembs, f0s=f0s)
+        # initialize
+        gen_loss = 0.0
 
-        # normalize output
-        outs = (outs - self.config["trg_stats"]["mean"]) / self.config["trg_stats"][
-            "scale"
-        ]
-        ys = (ys - self.config["trg_stats"]["mean"]) / self.config["trg_stats"]["scale"]
+        if self.config["model_type"] == "Taco2_AR":
+            # model forward
+            outs, outs_lens = self.model(hs, hlens, targets=ys, spk_embs=spembs, f0s=f0s)
 
-        # main loss
-        gen_loss = self.criterion["main"](outs, outs_lens, ys, olens, self.device)
-        self.total_train_loss["train/main"] += gen_loss.item()
+            # normalize target outputs
+            outs = (outs - self.config["trg_stats"]["mean"]) / self.config["trg_stats"][
+                "scale"
+            ]
+            ys = (ys - self.config["trg_stats"]["mean"]) / self.config["trg_stats"]["scale"]
 
-        self.total_train_loss["train/loss"] += gen_loss.item()
+            # main loss
+            gen_loss = self.criterion["main"](outs, outs_lens, ys, olens, self.device)
+            self.total_train_loss["train/main"] += gen_loss.item()
+
+            self.total_train_loss["train/loss"] += gen_loss.item()
+
+        elif self.config["model_type"] == "Diffusion":
+            # normalize
+            ys = (ys - self.config["trg_stats"]["mean"]) / self.config["trg_stats"]["scale"]
+
+            # model forward
+            noise_mel_, noise_mel, lengths = self.model(
+                x=hs,
+                lengths=hlens,
+                y_mel=ys,
+                spk=spembs
+            )
+
+            # noise mse loss
+            noise_loss = self.criterion["main"](noise_mel_, lengths, noise_mel, lengths, self.device)
+            gen_loss += noise_loss
+            self.total_train_loss["train/diffusion_loss"] += noise_loss.item()
+
+            # total multistream loss
+            self.total_train_loss["train/multistream_loss"] += gen_loss.item()
 
         # update model
         self.optimizer.zero_grad()
@@ -290,9 +314,14 @@ class Trainer(object):
         for eval_steps_per_epoch, batch in enumerate(
             tqdm(self.data_loader["dev"], desc="[eval]"), 1
         ):
-            if eval_steps_per_epoch == 1:
-                self._genearete_and_save_intermediate_result(batch)
-            else:
+            continue
+            if self.config["model_type"] == "Taco2_AR":
+            # normalize
+                if eval_steps_per_epoch == 1:
+                    self._genearete_and_save_intermediate_result(batch)
+                else:
+                    continue
+            elif self.config["model_type"] == "Diffusion":
                 continue
 
         logging.info(
@@ -735,17 +764,30 @@ def main():
         s3prl_vc.models,
         config.get("model_type", "Taco2_AR"),
     )
-    model = model_class(
-        upstream_featurizer.output_size,
-        config["num_mels"],
-        config["sampling_rate"]
-        / config["hop_size"]
-        * upstream_featurizer.downsample_rate
-        / 16000,
-        config["trg_stats"],
-        use_spemb=config.get("use_spk_emb", False),
-        **config["model_params"],
-    ).to(device)
+
+    if config["model_type"] == "Taco2_AR":
+        model = model_class(
+            upstream_featurizer.output_size,
+            config["num_mels"],
+            config["sampling_rate"]
+            / config["hop_size"]
+            * upstream_featurizer.downsample_rate
+            / 16000,
+            config["trg_stats"],
+            use_spemb=config.get("use_spk_emb", False),
+            **config["model_params"],
+        ).to(device)
+    elif config["model_type"] == "Diffusion":
+        model = model_class(
+            in_dim=upstream_featurizer.output_size,
+            use_spemb=config.get("use_spk_emb", False),
+            resample_ratio=config["sampling_rate"]
+            / config["hop_size"]
+            * upstream_featurizer.downsample_rate
+            / 16000,
+            **config["model_params"],
+        ).to(device)
+
 
     # load vocoder
     if config.get("vocoder", False):
@@ -762,7 +804,7 @@ def main():
     # define criterions
     main_criterion_class = getattr(
         s3prl_vc.losses,
-        config.get("main_loss_type", "L1"),
+        config.get("main_loss_type", "L1Loss"),
     )
     criterion = {
         "main": main_criterion_class(

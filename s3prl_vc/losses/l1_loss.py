@@ -16,9 +16,12 @@ class L1Loss(torch.nn.Module):
                               (2) masked loss calculation
     """
 
-    def __init__(self):
+    def __init__(self, loss_func="l1"):
         super(L1Loss, self).__init__()
-        self.objective = torch.nn.L1Loss(reduction="mean")
+        if loss_func == "l1":
+            self.objective = torch.nn.L1Loss(reduction="mean")
+        elif loss_func == "mse":
+            self.objective = torch.nn.MSELoss(reduction="mean")
 
     def forward(self, predicted, predicted_lens, target, target_lens, device):
         # match the upstream feature length to acoustic feature length to calculate the loss
