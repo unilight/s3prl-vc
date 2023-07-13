@@ -10,15 +10,15 @@ import torch.nn.functional as F
 from s3prl_vc.layers.utils import make_non_pad_mask
 
 
-class L1Loss(torch.nn.Module):
+class L2Loss(torch.nn.Module):
     """
-    L1 loss module supporting (1) loss calculation in the normalized target feature space
+    L2 loss module supporting (1) loss calculation in the normalized target feature space
                               (2) masked loss calculation
     """
 
     def __init__(self):
-        super(L1Loss, self).__init__()
-        self.objective = torch.nn.L1Loss(reduction="mean")
+        super(L2Loss, self).__init__()
+        self.objective = torch.nn.MSELoss(reduction="mean")
 
     def forward(self, predicted, predicted_lens, target, target_lens, device):
         # match the upstream feature length to acoustic feature length to calculate the loss
