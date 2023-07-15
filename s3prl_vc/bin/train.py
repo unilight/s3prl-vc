@@ -217,46 +217,21 @@ class Trainer(object):
         # initialize
         gen_loss = 0.0
 
-        if self.config["model_type"] == "Taco2_AR":
-            # model forward
-            outs, outs_lens = self.model(
-                hs, hlens, targets=ys, spk_embs=spembs, f0s=f0s
-            )
+        # model forward
+        predicted, targets, outs_lens = self.model(
+            hs, hlens, targets=ys, spk_embs=spembs, f0s=f0s
+        )
 
-            # normalize target outputs
-            outs = (outs - self.config["trg_stats"]["mean"]) / self.config["trg_stats"][
-                "scale"
-            ]
-            ys = (ys - self.config["trg_stats"]["mean"]) / self.config["trg_stats"][
-                "scale"
-            ]
+        if self.config["model_type"] == "Diffusion":
+            # diffusion model needs the inputs and outputs to be
+            # of the same length, so there are cases where it is
+            # cut to match with the upsampled upstream features
+            olens = outs_lens
 
-            # main loss
-            gen_loss = self.criterion["main"](outs, outs_lens, ys, olens, self.device)
-            self.total_train_loss["train/main"] += gen_loss.item()
+        gen_loss = self.criterion["main"](predicted, outs_lens, targets, olens, self.device)
 
-            self.total_train_loss["train/loss"] += gen_loss.item()
-
-        elif self.config["model_type"] == "Diffusion":
-            # normalize
-            ys = (ys - self.config["trg_stats"]["mean"]) / self.config["trg_stats"][
-                "scale"
-            ]
-
-            # model forward
-            noise_mel_, noise_mel, lengths = self.model(
-                x=hs, lengths=hlens, y_mel=ys, spk=spembs
-            )
-
-            # noise mse loss
-            noise_loss = self.criterion["main"](
-                noise_mel_, lengths, noise_mel, lengths, self.device
-            )
-            gen_loss += noise_loss
-            self.total_train_loss["train/diffusion_loss"] += noise_loss.item()
-
-            # total multistream loss
-            self.total_train_loss["train/multistream_loss"] += gen_loss.item()
+        self.total_train_loss["train/main"] += gen_loss.item()
+        self.total_train_loss["train/loss"] += gen_loss.item()
 
         # update model
         self.optimizer.zero_grad()
@@ -320,15 +295,12 @@ class Trainer(object):
         for eval_steps_per_epoch, batch in enumerate(
             tqdm(self.data_loader["dev"], desc="[eval]"), 1
         ):
-            continue
-            if self.config["model_type"] == "Taco2_AR":
-                # normalize
-                if eval_steps_per_epoch == 1:
-                    self._genearete_and_save_intermediate_result(batch)
-                else:
-                    continue
-            elif self.config["model_type"] == "Diffusion":
+            if eval_steps_per_epoch == 1:
+                self._genearete_and_save_intermediate_result(batch)
+            else:
                 continue
+            #elif self.config["model_type"] == "Diffusion":
+            #    continue
 
         logging.info(
             f"(Steps: {self.steps}) Finished evaluation "
@@ -411,17 +383,19 @@ class Trainer(object):
         with torch.no_grad():
             all_hs, all_hlens = self.upstream_model(xs, ilens)
             hs, hlens = self.upstream_featurizer(all_hs, all_hlens)
-            outs, _ = self.model(hs, hlens, spk_embs=spembs, f0s=f0s)
+            outs, ynorm, _ = self.model(hs, hlens, spk_embs=spembs, f0s=f0s)
 
         for idx, (out, olen, y) in enumerate(zip(outs, olens, ys)):
             out = out[:olen]
             y = y[:olen]
-            _plot_and_save(
-                out.cpu().numpy(),
-                dirname + f"/outs/{idx}_out.png",
-                ref=y.cpu().numpy(),
-                origin="lower",
-            )
+
+            if self.config["model_type"] == "Taco2_AR":
+                _plot_and_save(
+                    out.cpu().numpy(),
+                    dirname + f"/outs/{idx}_out.png",
+                    ref=y.cpu().numpy(),
+                    origin="lower",
+                )
 
             if self.vocoder is not None:
                 if not os.path.exists(os.path.join(dirname, "wav")):
@@ -771,28 +745,17 @@ def main():
         config.get("model_type", "Taco2_AR"),
     )
 
-    if config["model_type"] == "Taco2_AR":
-        model = model_class(
-            upstream_featurizer.output_size,
-            config["num_mels"],
-            config["sampling_rate"]
-            / config["hop_size"]
-            * upstream_featurizer.downsample_rate
-            / 16000,
-            config["trg_stats"],
-            use_spemb=config.get("use_spk_emb", False),
-            **config["model_params"],
-        ).to(device)
-    elif config["model_type"] == "Diffusion":
-        model = model_class(
-            in_dim=upstream_featurizer.output_size,
-            use_spemb=config.get("use_spk_emb", False),
-            resample_ratio=config["sampling_rate"]
-            / config["hop_size"]
-            * upstream_featurizer.downsample_rate
-            / 16000,
-            **config["model_params"],
-        ).to(device)
+    model = model_class(
+        upstream_featurizer.output_size,
+        config["num_mels"],
+        config["sampling_rate"]
+        / config["hop_size"]
+        * upstream_featurizer.downsample_rate
+        / 16000,
+        config["trg_stats"],
+        use_spemb=config.get("use_spk_emb", False),
+        **config["model_params"],
+    ).to(device)
 
     # load vocoder
     if config.get("vocoder", False):

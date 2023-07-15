@@ -194,28 +194,18 @@ def main():
 
     # get model and load parameters
     model_class = getattr(s3prl_vc.models, config["model_type"])
-    if config["model_type"] == "Taco2_AR":
-        model = model_class(
-            upstream_featurizer.output_size,
-            config["num_mels"],
-            config["sampling_rate"]
-            / config["hop_size"]
-            * upstream_featurizer.downsample_rate
-            / 16000,
-            config["trg_stats"],
-            use_spemb=config.get("use_spk_emb", False),
-            **config["model_params"],
-        ).to(device)
-    elif config["model_type"] == "Diffusion":
-        model = model_class(
-            in_dim=upstream_featurizer.output_size,
-            use_spemb=config.get("use_spk_emb", False),
-            resample_ratio=config["sampling_rate"]
-            / config["hop_size"]
-            * upstream_featurizer.downsample_rate
-            / 16000,
-            **config["model_params"],
-        ).to(device)
+
+    model = model_class(
+        upstream_featurizer.output_size,
+        config["num_mels"],
+        config["sampling_rate"]
+        / config["hop_size"]
+        * upstream_featurizer.downsample_rate
+        / 16000,
+        config["trg_stats"],
+        use_spemb=config.get("use_spk_emb", False),
+        **config["model_params"],
+    ).to(device)
 
     model.load_state_dict(torch.load(args.checkpoint, map_location="cpu")["model"])
     model = model.eval().to(device)
@@ -261,14 +251,9 @@ def main():
             all_hs, all_hlens = upstream_model(xs, ilens)
             hs, hlens = upstream_featurizer(all_hs, all_hlens)
 
-            if config["model_type"] == "Taco2_AR":
-                outs, _ = model(hs, hlens, spk_embs=spemb, f0s=f0s)
-                out = outs[0]
-
-            elif config["model_type"] == "Diffusion":
-                out = model.inference(hs, spk=spemb)
-                # inverse normalization
-                out = config["trg_stats"]["mean"] + (out * config["trg_stats"]["scale"])
+            # model forward
+            out, _, _olens = model(hs, hlens, spk_embs=spemb, f0s=f0s)
+            if out.dim() != 2:
                 out = out.squeeze(0)
 
             logging.info(
