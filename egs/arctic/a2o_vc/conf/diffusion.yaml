@@ -21,14 +21,14 @@ trim_hop_size: 512       # Hop size in trimming.
 ###########################################################
 model_type: "Diffusion"
 model_params:
-    out_dim: 80                             # Number of output channels.
     denoiser_residual_channels: 256         # Number of hidden channels used in the denoiser.
+use_spk_emb: false
+    
 
 ###########################################################
 #                      LOSS SETTING                       #
 ###########################################################
-main_loss_params:
-    loss_func: "mse"
+main_loss_type: L2Loss
 
 ###########################################################
 #                   INFERENCE SETTING                     #
