@@ -25,40 +25,36 @@ from s3prl_vc.models.diffsinger import GaussianDiffusion, DiffNet
 class Diffusion(torch.nn.Module):
     def __init__(
         self,
-        in_dim: int,  # input dimension of conditioning features
-        out_dim: int,  #
-        denoiser_residual_channels: int,
+        input_dim,
+        output_dim,
+        resample_ratio,
+        stats,
+        # model params below
         use_spemb=False,
-        resample_ratio=1,
+        denoiser_residual_channels=256,
     ):
         super().__init__()
-        self.in_dim = in_dim
-        self.out_dim = out_dim
+        self.input_dim = input_dim
+        self.output_dim = output_dim
         self.denoiser_residual_channels = denoiser_residual_channels
         self.resample_ratio = resample_ratio
+        self.stats = stats
 
         # ppgel -> melspec
         self.mel_model = GaussianDiffusion(
-            in_dim=in_dim,
-            out_dim=80,
+            in_dim=input_dim,
+            out_dim=output_dim,
             denoise_fn=DiffNet(
-                encoder_hidden_dim=in_dim,
+                encoder_hidden_dim=input_dim,
                 residual_channels=denoiser_residual_channels,
                 use_spk_emb=use_spemb,
-            ),
-            # TODO: an encoder can also be specified here
-            # encoder=Conv1dResnet(
-            #    in_dim=in_dim,
-            #    hidden_dim=256,
-            #    num_layers=2,
-            #    out_dim=256
-            # ),
+            )
         )
         """Initialize Diffusion Module.
 
         Args:
-            in_dim (int): Dimension of the inputs.
-            out_dim (int): Dimension of the outputs.
+            input_dim (int): Dimension of the inputs.
+            output_dim (int): Dimension of the outputs.
             denoiser_residual_channels (int): Dimension of diffusion model hidden units.
             use_spemb (bool): Whether or not to use speaker embeddings.
             resample_ratio (float): Ratio to align the input and output features.
@@ -68,22 +64,24 @@ class Diffusion(torch.nn.Module):
         self,
         x,
         lengths,
-        y_mel,
-        spk=None,
+        targets=None,
+        spk_embs=None,
+        f0s=None # not used, but just to unify with taco2
     ):
         """Calculate forward propagation.
 
         Args:
-            x (Tensor): Batch of padded input conditioning features (B, Lmax, in_dim).
+            x (Tensor): Batch of padded input conditioning features (B, Lmax, input_dim).
             lengths (LongTensor): Batch of lengths of each input batch (B,).
-            y_mel (Tensor): Batch of padded target features (B, Lmax, out_dim).
+            targets (Tensor): Batch of padded target features (B, Lmax, output_dim).
             spk (Optional[Tensor]): Batch of speaker embeddings (B, spk_embed_dim).
 
-        Returns:
+        Returns (training):
             Tensor: Ground truth noise.
             Tensor: Predicted noise.
             LongTensor: Resampled lengths based on upstream feature.
-
+        Returns (inference):
+            Tensor: Predicted mel spectrogram.
         """
 
         # resample the input features according to resample_ratio
@@ -92,38 +90,27 @@ class Diffusion(torch.nn.Module):
         x = resampled_features.permute(0, 2, 1)
         lengths = lengths * self.resample_ratio
 
-        # cut if necessary
-        if x.size(1) > y_mel.size(1):
-            x = x[:, : y_mel.size(1), :]
-        elif x.size(1) < y_mel.size(1):
-            y_mel = y_mel[:, : x.size(1), :]
+        if spk_embs is not None:
+            spk_embs = spk_embs.squeeze(-1)
 
-        if spk is not None:
-            spk = spk.squeeze(-1)
+        if targets is not None:
+            # normalize
+            targets = (targets - self.stats["mean"]) / self.stats["scale"]
 
-        mel_inp = x
-        mel_ = self.mel_model(mel_inp, lengths, y_mel, spk)
-        return (mel_[0], mel_[1], lengths)
+            # cut if necessary
+            if x.size(1) > targets.size(1):
+                x = x[:, : targets.size(1), :]
+            elif x.size(1) < targets.size(1):
+                targets = targets[:, : x.size(1), :]
 
-    def inference(self, x, spk=None):
-        """Calculate during inference.
+            # training
+            mel_ = self.mel_model(x, lengths, targets, spk_embs)
+            return mel_[0], mel_[1], lengths
 
-        Args:
-            x (Tensor): Batch of padded input conditioning features (B, Lmax, in_dim).
-            spk (Optional[Tensor]): Batch of speaker embeddings (B, spk_embed_dim).
+        elif targets is None:
+            # inference
+            mel_ = self.mel_model.inference(x, spk_emb=spk_embs)
 
-        Returns:
-            Tensor: Predicted mel-spectrogram.
-
-        """
-
-        # resample the input features according to resample_ratio
-        x = x.permute(0, 2, 1)
-        resampled_features = F.interpolate(x, scale_factor=self.resample_ratio)
-        x = resampled_features.permute(0, 2, 1)
-
-        if spk is not None:
-            spk = spk.transpose(1, 0)
-
-        mel_ = self.mel_model.inference(x, spk_emb=spk)
-        return mel_
+            # normalize
+            mel_ = self.stats["mean"] + (mel_ * self.stats["scale"])
+            return mel_.squeeze(0), None, lengths
