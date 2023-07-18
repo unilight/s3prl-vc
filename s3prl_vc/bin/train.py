@@ -381,13 +381,12 @@ class Trainer(object):
             out = out[:olen]
             y = y[:olen]
 
-            if self.config["model_type"] == "Taco2_AR":
-                _plot_and_save(
-                    out.cpu().numpy(),
-                    dirname + f"/outs/{idx}_out.png",
-                    ref=y.cpu().numpy(),
-                    origin="lower",
-                )
+            _plot_and_save(
+                out.cpu().numpy(),
+                dirname + f"/outs/{idx}_out.png",
+                ref=y.cpu().numpy(),
+                origin="lower",
+            )
 
             if self.vocoder is not None:
                 if not os.path.exists(os.path.join(dirname, "wav")):
