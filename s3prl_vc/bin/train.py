@@ -222,12 +222,6 @@ class Trainer(object):
             hs, hlens, targets=ys, spk_embs=spembs, f0s=f0s
         )
 
-        if self.config["model_type"] == "Diffusion":
-            # diffusion model needs the inputs and outputs to be
-            # of the same length, so there are cases where it is
-            # cut to match with the upsampled upstream features
-            olens = outs_lens
-
         gen_loss = self.criterion["main"](predicted, outs_lens, targets, olens, self.device)
 
         self.total_train_loss["train/main"] += gen_loss.item()
@@ -299,8 +293,6 @@ class Trainer(object):
                 self._genearete_and_save_intermediate_result(batch)
             else:
                 continue
-            #elif self.config["model_type"] == "Diffusion":
-            #    continue
 
         logging.info(
             f"(Steps: {self.steps}) Finished evaluation "

@@ -90,7 +90,7 @@ class Diffusion(torch.nn.Module):
         x = resampled_features.permute(0, 2, 1)
         lengths = lengths * self.resample_ratio
 
-        if spk_embs is not None:
+        if spk_embs is not None and type(spk_embs) != list:
             spk_embs = spk_embs.squeeze(-1)
 
         if targets is not None:

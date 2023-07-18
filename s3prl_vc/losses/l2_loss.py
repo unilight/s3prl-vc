@@ -22,9 +22,16 @@ class L2Loss(torch.nn.Module):
 
     def forward(self, predicted, predicted_lens, target, target_lens, device):
         # match the upstream feature length to acoustic feature length to calculate the loss
+
+        # NOTE: 
+        # diffusion model needs the inputs and outputs to be
+        # of the same length, so there are cases where it is
+        # cut to match with the upsampled upstream features
+        # thus, target_lens is not used
+
         if predicted.shape[1] > target.shape[1]:
             predicted = predicted[:, : target.shape[1]]
-            masks = make_non_pad_mask(target_lens).unsqueeze(-1).to(device)
+            masks = make_non_pad_mask(predicted_lens).unsqueeze(-1).to(device)
         if predicted.shape[1] <= target.shape[1]:
             target = target[:, : predicted.shape[1]]
             masks = make_non_pad_mask(predicted_lens).unsqueeze(-1).to(device)
