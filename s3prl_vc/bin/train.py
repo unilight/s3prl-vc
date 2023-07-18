@@ -7,7 +7,8 @@
 """Train VC model."""
 
 import warnings
-warnings.simplefilter(action='ignore', category=FutureWarning)
+
+warnings.simplefilter(action="ignore", category=FutureWarning)
 
 import argparse
 import logging
@@ -160,7 +161,7 @@ class Trainer(object):
             )
         else:
             self.model.load_state_dict(state_dict["model"])
-            self.upstream_featurizer.load_state_dict(state_dict["upstream_featurizer"])
+            self.upstream_featurizer.load_state_dict(state_dict["featurizer"])
         if not load_only_params:
             self.steps = state_dict["steps"]
             self.epochs = state_dict["epochs"]
@@ -213,19 +214,17 @@ class Trainer(object):
             all_hs, all_hlens = self.upstream_model(xs, ilens)
         hs, hlens = self.upstream_featurizer(all_hs, all_hlens)
 
+        # initialize
+        gen_loss = 0.0
+
         # model forward
-        outs, outs_lens = self.model(hs, hlens, targets=ys, spk_embs=spembs, f0s=f0s)
+        predicted, targets, outs_lens = self.model(
+            hs, hlens, targets=ys, spk_embs=spembs, f0s=f0s
+        )
 
-        # normalize output
-        outs = (outs - self.config["trg_stats"]["mean"]) / self.config["trg_stats"][
-            "scale"
-        ]
-        ys = (ys - self.config["trg_stats"]["mean"]) / self.config["trg_stats"]["scale"]
+        gen_loss = self.criterion["main"](predicted, outs_lens, targets, olens, self.device)
 
-        # main loss
-        gen_loss = self.criterion["main"](outs, outs_lens, ys, olens, self.device)
         self.total_train_loss["train/main"] += gen_loss.item()
-
         self.total_train_loss["train/loss"] += gen_loss.item()
 
         # update model
@@ -376,11 +375,12 @@ class Trainer(object):
         with torch.no_grad():
             all_hs, all_hlens = self.upstream_model(xs, ilens)
             hs, hlens = self.upstream_featurizer(all_hs, all_hlens)
-            outs, _ = self.model(hs, hlens, spk_embs=spembs, f0s=f0s)
+            outs, ynorm, _ = self.model(hs, hlens, spk_embs=spembs, f0s=f0s)
 
         for idx, (out, olen, y) in enumerate(zip(outs, olens, ys)):
             out = out[:olen]
             y = y[:olen]
+
             _plot_and_save(
                 out.cpu().numpy(),
                 dirname + f"/outs/{idx}_out.png",
@@ -735,6 +735,7 @@ def main():
         s3prl_vc.models,
         config.get("model_type", "Taco2_AR"),
     )
+
     model = model_class(
         upstream_featurizer.output_size,
         config["num_mels"],
@@ -762,7 +763,7 @@ def main():
     # define criterions
     main_criterion_class = getattr(
         s3prl_vc.losses,
-        config.get("main_loss_type", "L1"),
+        config.get("main_loss_type", "L1Loss"),
     )
     criterion = {
         "main": main_criterion_class(

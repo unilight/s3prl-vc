@@ -335,6 +335,7 @@ class Taco2_AR(nn.Module):
         self.hidden_dim = hidden_dim
         self.output_dim = output_dim
         self.resample_ratio = resample_ratio
+        self.stats = stats
 
         # f0 related
         self.use_f0 = use_f0
@@ -540,7 +541,13 @@ class Taco2_AR(nn.Module):
             # projection layer
             predicted = self.proj(predicted)
 
-        return predicted, lens
+        # normalize target outputs
+        predicted = self.normalize(predicted)
+        if targets is not None:
+            targets = targets.transpose(1, 0)
+            targets = self.normalize(targets)
+
+        return predicted, targets, lens
 
     def _integrate_with_emb(self, hs, lens, embs, type, emb_projection):
         """Integrate speaker/f0 embedding with hidden states.

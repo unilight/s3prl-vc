@@ -163,8 +163,8 @@ def main():
             f0_max=f0_max,  # for world f0 extraction
             log_f0=config.get("log_f0", True),
             f0_normalize=config.get("f0_normalize", False),
-            f0_mean=f0_mean, # for speaker normalization
-            f0_scale=f0_scale, # for speaker normalization
+            f0_mean=f0_mean,  # for speaker normalization
+            f0_scale=f0_scale,  # for speaker normalization
             use_spk_emb=config.get("use_spk_emb", False),
             spk_emb_extractor=config.get("spk_emb_extractor", "wespeaker"),
             spk_emb_source="external",
@@ -194,6 +194,7 @@ def main():
 
     # get model and load parameters
     model_class = getattr(s3prl_vc.models, config["model_type"])
+
     model = model_class(
         upstream_featurizer.output_size,
         config["num_mels"],
@@ -205,6 +206,7 @@ def main():
         use_spemb=config.get("use_spk_emb", False),
         **config["model_params"],
     ).to(device)
+
     model.load_state_dict(torch.load(args.checkpoint, map_location="cpu")["model"])
     model = model.eval().to(device)
     logging.info(f"Loaded model parameters from {args.checkpoint}.")
@@ -245,12 +247,15 @@ def main():
             if spemb is not None:
                 spemb = torch.from_numpy(spemb).unsqueeze(0).float().to(device)
             ilens = torch.LongTensor([x.shape[0]]).to(device)
-
             start_time = time.time()
             all_hs, all_hlens = upstream_model(xs, ilens)
             hs, hlens = upstream_featurizer(all_hs, all_hlens)
-            outs, _ = model(hs, hlens, spk_embs=spemb, f0s=f0s)
-            out = outs[0]
+
+            # model forward
+            out, _, _olens = model(hs, hlens, spk_embs=spemb, f0s=f0s)
+            if out.dim() != 2:
+                out = out.squeeze(0)
+
             logging.info(
                 "inference speed = %.1f frames / sec."
                 % (int(out.size(0)) / (time.time() - start_time))
