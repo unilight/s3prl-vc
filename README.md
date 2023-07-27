@@ -21,7 +21,7 @@ Given a source speech, we first use a recognizer (or upstream) to extract interm
 
 Currently the supported S3R upstream completely depend on the official [S3PRL](https://s3prl.github.io/s3prl/tutorial/upstream_collection.html) repository. In addition, we also provide two PPG models: `ppg_sxliu` uses the ASR model provided by [Songxiang Liu's ppg-vc repo](https://github.com/liusongxiang/ppg-vc), and `ppg_whisper` uses the [OpenAI Whisper ASR model](https://github.com/openai/whisper). Note that in my experiments, the Whisper model yields very bad results, but I don't know what the reason is. I would appreciate it if someone could figure out why.
 
-## Instsallation 
+## Installation 
 
 ### 1. (Recommended) Editable installation with virtualenv 
 
