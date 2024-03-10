@@ -322,6 +322,9 @@ class AudioMelDataset(MelDataset):
             get_basename(audio_file): audio_file for audio_file in audio_files
         }
 
+        # audio paths is a must?
+        self.audio_paths = self.audio_files
+
 
 ##########################
 # Datasets without audio #
