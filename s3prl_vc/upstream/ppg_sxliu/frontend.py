@@ -32,7 +32,7 @@ class DefaultFrontend(torch.nn.Module):
         fmax: int = None,
         htk: bool = False,
         norm=1,
-        frontend_conf=None, #Optional[dict] = get_default_kwargs(Frontend),
+        frontend_conf=None,  # Optional[dict] = get_default_kwargs(Frontend),
         kaldi_padding_mode=False,
         downsample_rate: int = 1,
     ):
@@ -60,7 +60,13 @@ class DefaultFrontend(torch.nn.Module):
             self.frontend = None
 
         self.logmel = LogMel(
-            fs=fs, n_fft=n_fft, n_mels=n_mels, fmin=fmin, fmax=fmax, htk=htk, norm=norm,
+            fs=fs,
+            n_fft=n_fft,
+            n_mels=n_mels,
+            fmin=fmin,
+            fmax=fmax,
+            htk=htk,
+            norm=norm,
         )
         self.n_mels = n_mels
 
@@ -100,21 +106,22 @@ class DefaultFrontend(torch.nn.Module):
 
         # 4. STFT -> Power spectrum
         # h: ComplexTensor(B, T, F) -> torch.Tensor(B, T, F)
-        input_power = input_stft.real ** 2 + input_stft.imag ** 2
+        input_power = input_stft.real**2 + input_stft.imag**2
 
         # 5. Feature transform e.g. Stft -> Log-Mel-Fbank
         # input_power: (Batch, [Channel,] Length, Freq)
         #       -> input_feats: (Batch, Length, Dim)
         input_feats, _ = self.logmel(input_power, feats_lens)
-               
+
         # NOTE(sx): pad
         max_len = input_feats.size(1)
         if self.downsample_rate > 1 and max_len % self.downsample_rate != 0:
             padding = self.downsample_rate - max_len % self.downsample_rate
             # print("Logmel: ", input_feats.size())
-            input_feats = torch.nn.functional.pad(input_feats, (0, 0, 0, padding),
-                                                  "constant", 0)
+            input_feats = torch.nn.functional.pad(
+                input_feats, (0, 0, 0, padding), "constant", 0
+            )
             # print("Logmel(after padding): ",input_feats.size())
-            feats_lens[torch.argmax(feats_lens)] = max_len + padding 
+            feats_lens[torch.argmax(feats_lens)] = max_len + padding
 
         return input_feats, feats_lens

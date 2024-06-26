@@ -7,7 +7,10 @@ from s3prl_vc.upstream.ppg_sxliu.nets_utils import make_pad_mask
 
 class UtteranceMVN(torch.nn.Module):
     def __init__(
-        self, norm_means: bool = True, norm_vars: bool = False, eps: float = 1.0e-20,
+        self,
+        norm_means: bool = True,
+        norm_vars: bool = False,
+        eps: float = 1.0e-20,
     ):
         super().__init__()
         self.norm_means = norm_means

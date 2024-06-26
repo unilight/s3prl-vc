@@ -9,8 +9,8 @@ from s3prl_vc.upstream.ppg_sxliu.utterance_mvn import UtteranceMVN
 from s3prl_vc.upstream.ppg_sxliu.encoder.conformer_encoder import ConformerEncoder
 from s3prl_vc.utils.download import _urls_to_filepaths
 
-TRAIN_CONFIG_URL="https://github.com/liusongxiang/ppg-vc/raw/main/conformer_ppg_model/en_conformer_ctc_att/config.yaml"
-MODEL_FILE_URL="https://github.com/liusongxiang/ppg-vc/raw/main/conformer_ppg_model/en_conformer_ctc_att/24epoch.pth"
+TRAIN_CONFIG_URL = "https://github.com/liusongxiang/ppg-vc/raw/main/conformer_ppg_model/en_conformer_ctc_att/config.yaml"
+MODEL_FILE_URL = "https://github.com/liusongxiang/ppg-vc/raw/main/conformer_ppg_model/en_conformer_ctc_att/24epoch.pth"
 
 
 class PPGModel(torch.nn.Module):
@@ -25,9 +25,9 @@ class PPGModel(torch.nn.Module):
         self.normalize = normalizer
         self.encoder = encoder
         self.hidden_size = encoder.output_size()
-    
+
     # required by S3PRL Featurizer
-    def get_downsample_rates(self, key: str=None) -> int:
+    def get_downsample_rates(self, key: str = None) -> int:
         return 160
 
     @property
@@ -60,9 +60,7 @@ class PPGModel(torch.nn.Module):
         # As required by S3PRL Featurizer, needs to be returned in lists
         return [encoder_out], [encoder_out_lens]
 
-    def _extract_feats(
-        self, speech: torch.Tensor, speech_lengths: torch.Tensor
-    ):
+    def _extract_feats(self, speech: torch.Tensor, speech_lengths: torch.Tensor):
         assert speech_lengths.dim() == 1, speech_lengths.shape
 
         # for data-parallel
@@ -78,14 +76,14 @@ class PPGModel(torch.nn.Module):
             # No frontend and no feature extract
             feats, feats_lengths = speech, speech_lengths
         return feats, feats_lengths
-        
+
 
 def build_model(args):
     normalizer = UtteranceMVN(**args.normalize_conf)
     frontend = DefaultFrontend(**args.frontend_conf)
     encoder = ConformerEncoder(input_size=80, **args.encoder_conf)
     model = PPGModel(frontend, normalizer, encoder)
-    
+
     return model
 
 
@@ -104,8 +102,8 @@ def build_ppg_model():
     model = build_model(args)
     model_state_dict = model.state_dict()
 
-    ckpt_state_dict = torch.load(model_file, map_location='cpu')
-    ckpt_state_dict = {k:v for k,v in ckpt_state_dict.items() if 'encoder' in k}
+    ckpt_state_dict = torch.load(model_file, map_location="cpu")
+    ckpt_state_dict = {k: v for k, v in ckpt_state_dict.items() if "encoder" in k}
 
     model_state_dict.update(ckpt_state_dict)
     model.load_state_dict(model_state_dict)

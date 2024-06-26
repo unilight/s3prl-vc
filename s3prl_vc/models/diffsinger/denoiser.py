@@ -11,11 +11,7 @@ class SpeakerAdapter(nn.Module):
     Adaspeech2 conditional layer normalization.
     """
 
-    def __init__(self,
-                 speaker_dim,
-                 adapter_dim,
-                 epsilon=1e-5
-                 ):
+    def __init__(self, speaker_dim, adapter_dim, epsilon=1e-5):
         super(SpeakerAdapter, self).__init__()
         self.speaker_dim = speaker_dim
         self.adapter_dim = adapter_dim
@@ -92,10 +88,8 @@ class ResidualBlock(nn.Module):
         self.use_spk_emb = use_spk_emb
         if use_spk_emb:
             self.speaker_projection = SpeakerAdapter(
-                speaker_dim=512,
-                adapter_dim=residual_channels
+                speaker_dim=512, adapter_dim=residual_channels
             )
-
 
     def forward(self, x, conditioner, diffusion_step, spk_emb):
         diffusion_step = self.diffusion_projection(diffusion_step).unsqueeze(-1)
@@ -124,7 +118,7 @@ class DiffNet(nn.Module):
         residual_layers=20,
         residual_channels=256,
         dilation_cycle_length=4,
-        use_spk_emb=False
+        use_spk_emb=False,
     ):
         super().__init__()
         self.in_dim = in_dim

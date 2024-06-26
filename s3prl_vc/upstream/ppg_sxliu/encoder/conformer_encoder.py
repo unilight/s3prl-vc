@@ -20,7 +20,11 @@ from .encoder_layer import EncoderLayer
 from ..nets_utils import get_activation, make_pad_mask
 from .vgg import VGG2L
 from .attention import MultiHeadedAttention, RelPositionMultiHeadedAttention
-from .embedding import PositionalEncoding, ScaledPositionalEncoding, RelPositionalEncoding
+from .embedding import (
+    PositionalEncoding,
+    ScaledPositionalEncoding,
+    RelPositionalEncoding,
+)
 from .layer_norm import LayerNorm
 from .multi_layer_conv import Conv1dLinear, MultiLayeredConv1d
 from .positionwise_feed_forward import PositionwiseFeedForward
@@ -83,7 +87,7 @@ class ConformerEncoder(torch.nn.Module):
     ):
         """Construct an Encoder object."""
         super().__init__()
-        
+
         self._output_size = attention_dim
         idim = input_size
 
@@ -205,10 +209,10 @@ class ConformerEncoder(torch.nn.Module):
         )
         if self.normalize_before:
             self.after_norm = LayerNorm(attention_dim)
-    
+
     def output_size(self) -> int:
-        return self._output_size 
-    
+        return self._output_size
+
     def forward(
         self,
         xs_pad: torch.Tensor,
@@ -239,24 +243,3 @@ class ConformerEncoder(torch.nn.Module):
             xs_pad = self.after_norm(xs_pad)
         olens = masks.squeeze(1).sum(1)
         return xs_pad, olens, None
-    
-    # def forward(self, xs, masks):
-        # """Encode input sequence.
-
-        # :param torch.Tensor xs: input tensor
-        # :param torch.Tensor masks: input mask
-        # :return: position embedded tensor and mask
-        # :rtype Tuple[torch.Tensor, torch.Tensor]:
-        # """
-        # if isinstance(self.embed, (Conv2dSubsampling, VGG2L)):
-            # xs, masks = self.embed(xs, masks)
-        # else:
-            # xs = self.embed(xs)
-
-        # xs, masks = self.encoders(xs, masks)
-        # if isinstance(xs, tuple):
-            # xs = xs[0]
-
-        # if self.normalize_before:
-            # xs = self.after_norm(xs)
-        # return xs, masks

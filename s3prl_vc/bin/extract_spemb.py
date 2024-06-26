@@ -27,8 +27,7 @@ def main():
     """Run preprocessing process."""
     parser = argparse.ArgumentParser(
         description=(
-            "Compute speaker embedding "
-            "(See detail in bin/extract_spemb.py)."
+            "Compute speaker embedding " "(See detail in bin/extract_spemb.py)."
         )
     )
     parser.add_argument(

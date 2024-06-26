@@ -2,6 +2,7 @@ import torch
 import whisper
 import torch.nn.functional as F
 
+
 class WhisperPPG(torch.nn.Module):
     def __init__(self, model_size: str = "small", default_pe_max_length: int = 5000):
         super().__init__()
@@ -22,7 +23,7 @@ class WhisperPPG(torch.nn.Module):
         self.pe = pe.to(device=x.device, dtype=x.dtype)
 
     # required by S3PRL Featurizer
-    def get_downsample_rates(self, key: str=None) -> int:
+    def get_downsample_rates(self, key: str = None) -> int:
         return 320
 
     @property
@@ -38,14 +39,14 @@ class WhisperPPG(torch.nn.Module):
         return [self.get_downsample_rates()]
 
     def forward(self, speech, speech_lens):
-        x = whisper.audio.log_mel_spectrogram(speech) # [B, 80, L]
+        x = whisper.audio.log_mel_spectrogram(speech)  # [B, 80, L]
 
         x = F.gelu(self.model.encoder.conv1(x))
         x = F.gelu(self.model.encoder.conv2(x))
         x = x.permute(0, 2, 1)
-        
+
         self.extend_pe(x)
-        x = (x + self.pe[:, :x.shape[1]])
+        x = x + self.pe[:, : x.shape[1]]
 
         for block in self.model.encoder.blocks:
             x = block(x)

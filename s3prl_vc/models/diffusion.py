@@ -48,7 +48,7 @@ class Diffusion(torch.nn.Module):
                 encoder_hidden_dim=input_dim,
                 residual_channels=denoiser_residual_channels,
                 use_spk_emb=use_spemb,
-            )
+            ),
         )
         """Initialize Diffusion Module.
 
@@ -66,7 +66,7 @@ class Diffusion(torch.nn.Module):
         lengths,
         targets=None,
         spk_embs=None,
-        f0s=None # not used, but just to unify with taco2
+        f0s=None,  # not used, but just to unify with taco2
     ):
         """Calculate forward propagation.
 

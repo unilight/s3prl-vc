@@ -256,6 +256,9 @@ def main():
             if out.dim() != 2:
                 out = out.squeeze(0)
 
+            # denormalization
+            out = out * config["trg_stats"]["scale"] + config["trg_stats"]["mean"]
+
             logging.info(
                 "inference speed = %.1f frames / sec."
                 % (int(out.size(0)) / (time.time() - start_time))

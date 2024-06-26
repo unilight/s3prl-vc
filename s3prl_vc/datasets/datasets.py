@@ -73,6 +73,7 @@ class MelDataset(Dataset):
                     load_asv_model,
                     get_embedding,
                 )
+
                 self.spk_emb_model = load_asv_model()
                 self.spk_emb_func = get_embedding
             elif spk_emb_extractor == "resemblyzer":
@@ -80,6 +81,7 @@ class MelDataset(Dataset):
                     load_asv_model,
                     get_embedding,
                 )
+
                 self.spk_emb_model = load_asv_model()
                 self.spk_emb_func = get_embedding
             else:
@@ -174,7 +176,14 @@ class MelDataset(Dataset):
         if self.return_sampling_rate:
             audio = (audio, fs)
 
-        items = {"utt_id": "", "audio": audio, "mel": mel, "f0": None, "spemb": None, "wavpath": None}
+        items = {
+            "utt_id": "",
+            "audio": audio,
+            "mel": mel,
+            "f0": None,
+            "spemb": None,
+            "wavpath": None,
+        }
 
         if self.return_utt_id:
             items["utt_id"] = utt_id
@@ -185,7 +194,7 @@ class MelDataset(Dataset):
                 items["spemb"] = read_hdf5(self.spk_emb_paths[utt_id], "spemb")
             else:
                 spembs = []
-                for spk_emb_source_file in self.spk_emb_source_files[utt_id]:
+                for spk_emb_source_file in self.spk_emb_paths[utt_id]:
                     spembs.append(
                         np.squeeze(
                             self.spk_emb_func(spk_emb_source_file, self.spk_emb_model)
@@ -244,7 +253,10 @@ class AudioSCPMelDataset(MelDataset):
         audio_keys = list()
         spk_emb_paths = dict()
 
-        assert self.spk_emb_source in ["self", "external"], f"Unknown spk_emb_source: {self.spk_emb_source}"
+        assert self.spk_emb_source in [
+            "self",
+            "external",
+        ], f"Unknown spk_emb_source: {self.spk_emb_source}"
 
         with open(wav_scp) as f:
             for line in f.read().splitlines():

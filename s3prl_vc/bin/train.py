@@ -222,7 +222,9 @@ class Trainer(object):
             hs, hlens, targets=ys, spk_embs=spembs, f0s=f0s
         )
 
-        gen_loss = self.criterion["main"](predicted, outs_lens, targets, olens, self.device)
+        gen_loss = self.criterion["main"](
+            predicted, outs_lens, targets, olens, self.device
+        )
 
         self.total_train_loss["train/main"] += gen_loss.item()
         self.total_train_loss["train/loss"] += gen_loss.item()

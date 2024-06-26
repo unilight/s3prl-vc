@@ -188,7 +188,14 @@ class GaussianDiffusion(torch.nn.Module):
 
     @torch.no_grad()
     def p_sample(
-        self, x, t, cond, noise_fn=torch.randn, clip_denoised=True, repeat_noise=False, spk_emb=None
+        self,
+        x,
+        t,
+        cond,
+        noise_fn=torch.randn,
+        clip_denoised=True,
+        repeat_noise=False,
+        spk_emb=None,
     ):
         b, *_, device = *x.shape, x.device
         model_mean, _, model_log_variance = self.p_mean_variance(
@@ -326,7 +333,10 @@ class GaussianDiffusion(torch.nn.Module):
         else:
             for i in tqdm(reversed(range(0, t)), desc="sample time step", total=t):
                 x = self.p_sample(
-                    x, torch.full((B,), i, device=device, dtype=torch.long), cond, spk_emb=spk_emb
+                    x,
+                    torch.full((B,), i, device=device, dtype=torch.long),
+                    cond,
+                    spk_emb=spk_emb,
                 )
         x = self._denorm(x[:, 0].transpose(1, 2), self.norm_scale)
         return x
