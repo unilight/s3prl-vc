@@ -13,6 +13,9 @@ def get_upstream(name: str) -> torch.nn.Module:
         from s3prl_vc.upstream.whisper import WhisperPPG
 
         return WhisperPPG()
+        from s3prl_vc.upstream.usm import USM
+    elif name == "usm":
+        return USM()
     else:
         raise ValueError("upstream not supported.")
         exit(1)

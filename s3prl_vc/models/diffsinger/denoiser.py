@@ -72,7 +72,7 @@ def silu(x):
 
 
 class ResidualBlock(nn.Module):
-    def __init__(self, encoder_hidden, residual_channels, dilation, use_spk_emb):
+    def __init__(self, encoder_hidden, residual_channels, dilation, use_spk_emb, spk_emb_dim=512):
         super().__init__()
         self.dilated_conv = Conv1d(
             residual_channels,
@@ -88,7 +88,7 @@ class ResidualBlock(nn.Module):
         self.use_spk_emb = use_spk_emb
         if use_spk_emb:
             self.speaker_projection = SpeakerAdapter(
-                speaker_dim=512, adapter_dim=residual_channels
+                speaker_dim=spk_emb_dim, adapter_dim=residual_channels
             )
 
     def forward(self, x, conditioner, diffusion_step, spk_emb):
@@ -119,6 +119,7 @@ class DiffNet(nn.Module):
         residual_channels=256,
         dilation_cycle_length=4,
         use_spk_emb=False,
+        spk_emb_dim=512,
     ):
         super().__init__()
         self.in_dim = in_dim
@@ -136,6 +137,7 @@ class DiffNet(nn.Module):
                     residual_channels,
                     2 ** (i % dilation_cycle_length),
                     use_spk_emb,
+                    spk_emb_dim,
                 )
                 for i in range(residual_layers)
             ]

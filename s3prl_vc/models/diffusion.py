@@ -31,6 +31,7 @@ class Diffusion(torch.nn.Module):
         stats,
         # model params below
         use_spemb=False,
+        spk_emb_dim=512,
         denoiser_residual_channels=256,
     ):
         super().__init__()
@@ -48,6 +49,7 @@ class Diffusion(torch.nn.Module):
                 encoder_hidden_dim=input_dim,
                 residual_channels=denoiser_residual_channels,
                 use_spk_emb=use_spemb,
+                spk_emb_dim=spk_emb_dim,
             ),
         )
         """Initialize Diffusion Module.
