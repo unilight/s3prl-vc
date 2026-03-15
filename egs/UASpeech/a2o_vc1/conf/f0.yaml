@@ -1,0 +1,112 @@
+CF02:
+  maxf0: 290
+  minf0: 90
+  npow: -20
+CF03:
+  maxf0: 340
+  minf0: 140
+  npow: -10
+CF04:
+  maxf0: 240
+  minf0: 140
+  npow: -10
+CF05:
+  maxf0: 290
+  minf0: 140
+  npow: -10
+CM01:
+  maxf0: 190
+  minf0: 90
+  npow: -5
+CM04:
+  maxf0: 190
+  minf0: 70
+  npow: 0
+CM05:
+  maxf0: 240
+  minf0: 90
+  npow: -15
+CM06:
+  maxf0: 190
+  minf0: 90
+  npow: -10
+CM08:
+  maxf0: 220
+  minf0: 70
+  npow: -10
+CM09:
+  maxf0: 240
+  minf0: 90
+  npow: -25
+CM10:
+  maxf0: 240
+  minf0: 90
+  npow: -10
+CM12:
+  maxf0: 240
+  minf0: 90
+  npow: -5
+CM13:
+  maxf0: 190
+  minf0: 90
+  npow: -10
+F02:
+  maxf0: 390
+  minf0: 140
+  npow: -20
+F03:
+  maxf0: 390
+  minf0: 140
+  npow: -20
+F04:
+  maxf0: 390
+  minf0: 150
+  npow: -20
+F05:
+  maxf0: 390
+  minf0: 145
+  npow: -20
+M01:
+  maxf0: 340
+  minf0: 60
+  npow: -10
+M04:
+  maxf0: 290
+  minf0: 100
+  npow: -20
+M05:
+  maxf0: 240
+  minf0: 70
+  npow: -20
+M07:
+  maxf0: 340
+  minf0: 70
+  npow: -30
+M08:
+  maxf0: 290
+  minf0: 70
+  npow: -20
+M09:
+  maxf0: 240
+  minf0: 70
+  npow: -20
+M10:
+  maxf0: 240
+  minf0: 70
+  npow: -20
+M11:
+  maxf0: 240
+  minf0: 70
+  npow: -15
+M12:
+  maxf0: 340
+  minf0: 90
+  npow: -10
+M14:
+  maxf0: 290
+  minf0: 70
+  npow: -10
+M16:
+  maxf0: 240
+  minf0: 70
+  npow: -10

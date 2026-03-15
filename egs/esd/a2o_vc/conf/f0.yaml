@@ -1,0 +1,150 @@
+0011_Angry:
+  f0min: 70
+  f0max: 340
+0011_Happy:
+  f0min: 70
+  f0max: 390
+0011_Neutral:
+  f0min: 70
+  f0max: 240
+0011_Sad:
+  f0min: 70
+  f0max: 240
+0011_Surprise:
+  f0min: 70
+  f0max: 490
+0012_Angry:
+  f0min: 70
+  f0max: 440
+0012_Happy:
+  f0min: 70
+  f0max: 490
+0012_Neutral:
+  f0min: 60
+  f0max: 290
+0012_Sad:
+  f0min: 90
+  f0max: 390
+0012_Surprise:
+  f0min: 70
+  f0max: 440
+0013_Angry:
+  f0min: 60
+  f0max: 340
+0013_Happy:
+  f0min: 60
+  f0max: 440
+0013_Neutral:
+  f0min: 60
+  f0max: 240
+0013_Sad:
+  f0min: 60
+  f0max: 240
+0013_Surprise:
+  f0min: 60
+  f0max: 440
+0014_Angry:
+  f0min: 
+  f0max: 
+0014_Happy:
+  f0min: 
+  f0max: 
+0014_Neutral:
+  f0min: 
+  f0max: 
+0014_Sad:
+  f0min: 
+  f0max: 
+0014_Surprise:
+  f0min: 
+  f0max: 
+0015_Angry:
+  f0min: 
+  f0max: 
+0015_Happy:
+  f0min: 
+  f0max: 
+0015_Neutral:
+  f0min: 
+  f0max: 
+0015_Sad:
+  f0min: 
+  f0max: 
+0015_Surprise:
+  f0min: 
+  f0max: 
+0016_Angry:
+  f0min: 
+  f0max: 
+0016_Happy:
+  f0min: 
+  f0max: 
+0016_Neutral:
+  f0min: 
+  f0max: 
+0016_Sad:
+  f0min: 
+  f0max: 
+0016_Surprise:
+  f0min: 
+  f0max: 
+0017_Angry:
+  f0min: 
+  f0max: 
+0017_Happy:
+  f0min: 
+  f0max: 
+0017_Neutral:
+  f0min: 
+  f0max: 
+0017_Sad:
+  f0min: 
+  f0max: 
+0017_Surprise:
+  f0min: 
+  f0max: 
+0018_Angry:
+  f0min: 
+  f0max: 
+0018_Happy:
+  f0min: 
+  f0max: 
+0018_Neutral:
+  f0min: 
+  f0max: 
+0018_Sad:
+  f0min: 
+  f0max: 
+0018_Surprise:
+  f0min: 
+  f0max: 
+0019_Angry:
+  f0min: 
+  f0max: 
+0019_Happy:
+  f0min: 
+  f0max: 
+0019_Neutral:
+  f0min: 
+  f0max: 
+0019_Sad:
+  f0min: 
+  f0max: 
+0019_Surprise:
+  f0min: 
+  f0max: 
+0020_Angry:
+  f0min: 
+  f0max: 
+0020_Happy:
+  f0min: 
+  f0max: 
+0020_Neutral:
+  f0min: 
+  f0max: 
+0020_Sad:
+  f0min: 
+  f0max: 
+0020_Surprise:
+  f0min: 
+  f0max: 
